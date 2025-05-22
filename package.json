@@ -1,6 +1,6 @@
 {
   "name": "terraform-aws-nat-instance",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Repository to create a nat instance without a marketplace license.",
   "directories": {
     "doc": "docs"
