@@ -1,7 +1,30 @@
 # Modulo Terraform AWS NAT Gateway/Instance <!-- omit in toc -->
 
-<!-- toc -->
-<!-- tocstop -->
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Caratteristiche Principali del modulo](#caratteristiche-principali-del-modulo)
+- [Requisiti](#requisiti)
+- [Output](#output)
+- [Architettura](#architettura)
+  - [Configurazione](#configurazione)
+  - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
+  - [Configurazione IAM](#configurazione-iam)
+- [Dettagli dello Script User Data](#dettagli-dello-script-user-data)
+  - [Aggiornamenti di Sistema e Pacchetti](#aggiornamenti-di-sistema-e-pacchetti)
+  - [Configurazione di Rete](#configurazione-di-rete)
+  - [Regole di Sicurezza](#regole-di-sicurezza)
+  - [Configurazione del Monitoraggio](#configurazione-del-monitoraggio)
+- [Note e Best Practices](#note-e-best-practices)
+- [Troubleshooting](#troubleshooting)
+- [Requirements](#requirements)
+- [Providers](#providers)
+- [Modules](#modules)
+- [Resources](#resources)
+- [Inputs](#inputs)
+- [Outputs](#outputs)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 Questo modulo Terraform offre un modo flessibile per gestire la Nat Instance nel tuo Virtual Private Cloud di AWS. Nell'esempio riporto come usare sia i NAT Gateway (gestiti da AWS) che le NAT Instance (istanze EC2 che fungono da NAT). Puoi scegliere tra un singolo NAT Gateway per l'intero VPC, un NAT Gateway per Availability Zone oppure utilizzare le NAT Instance.
 
