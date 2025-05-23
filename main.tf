@@ -74,7 +74,7 @@ resource "aws_security_group" "natgw_private" {
 resource "aws_network_interface" "natgw_public" {
   count       = local.nat_instance_count
   subnet_id   = var.public_subnet_ids[count.index]
-  description = "${var.name_prefix}-eth0-natgw-${count.index + 1}"
+  description = "Public ENI for ${var.name_prefix}-eth0-natgw-${count.index + 1}"
 
   tags = {
     Name = "${var.name_prefix}-eth0-natgw-${count.index + 1}-public"
@@ -84,6 +84,7 @@ resource "aws_network_interface" "natgw_public" {
 resource "aws_network_interface" "natgw_private" {
   count             = local.nat_instance_count
   subnet_id         = var.private_subnet_ids[count.index]
+  description       = "Private ENI for ${var.name_prefix}-eth0-natgw-${count.index + 1}"
   security_groups   = [aws_security_group.natgw_private[count.index].id]
   source_dest_check = false
 
