@@ -20,12 +20,12 @@ resource "aws_iam_role" "ec2-nat-ssm-cloudwatch" {
 # IAM Instance Profile
 resource "aws_iam_instance_profile" "ec2-nat-ssm-cloudwatch-instance-profile" {
   name_prefix = "${var.name_prefix}-ec2-nat-ssm-cloudwatch-"
-  role = aws_iam_role.ec2-nat-ssm-cloudwatch.name
+  role        = aws_iam_role.ec2-nat-ssm-cloudwatch.name
 }
 
 # Attach cloudwatch Policy
 resource "aws_iam_role_policy_attachment" "cloudwatch-nat-logs-policy2" {
-  role     = aws_iam_role.ec2-nat-ssm-cloudwatch.name
+  role       = aws_iam_role.ec2-nat-ssm-cloudwatch.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
