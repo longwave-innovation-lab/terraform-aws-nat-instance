@@ -4,8 +4,6 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
 - [Caratteristiche Principali del modulo](#caratteristiche-principali-del-modulo)
-- [Requisiti](#requisiti)
-- [Output](#output)
 - [Architettura](#architettura)
   - [Configurazione](#configurazione)
   - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
@@ -46,20 +44,6 @@ Se vpc_natgw = 2: Viene creato un NAT Gateway per ogni zona di disponibilità (A
 - Configurazione e logging automatici di iptables su Cloudwatch
 - Attivazione profilo SSM su Nat Instance per utilizzarlo anche come bastion host o reverse port forwarding.
 - Salvataggio chiave private SSH su servizio AWS Parametr Store e locale
-
-## Requisiti
-
-- Terraform >= 1.10.5
-- AWS Provider >= 5.86.1
-- Account AWS con permessi appropriati
-
-## Output
-
-| Nome | Descrizione |
-|------|-------------|
-| nat_instance_ids | Lista degli ID delle istanze NAT |
-| nat_public_ips | Lista degli IP pubblici delle istanze NAT |
-| nat_instance_details | Informazioni dettagliate sulle istanze NAT |
 
 ## Architettura
 
