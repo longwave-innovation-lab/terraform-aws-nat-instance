@@ -74,7 +74,7 @@ resource "aws_security_group" "natgw_private" {
 resource "aws_network_interface" "natgw_public" {
   count       = local.nat_instance_count
   subnet_id   = var.public_subnet_ids[count.index]
-  description = "${var.name_prefix}-eth0-natgw-${count.index + 1}"
+  description = "Public ENI for ${var.name_prefix}-eth0-natgw-${count.index + 1}"
 
   tags = {
     Name = "${var.name_prefix}-eth0-natgw-${count.index + 1}-public"
@@ -84,6 +84,7 @@ resource "aws_network_interface" "natgw_public" {
 resource "aws_network_interface" "natgw_private" {
   count             = local.nat_instance_count
   subnet_id         = var.private_subnet_ids[count.index]
+  description       = "Private ENI for ${var.name_prefix}-eth0-natgw-${count.index + 1}"
   security_groups   = [aws_security_group.natgw_private[count.index].id]
   source_dest_check = false
 
@@ -93,7 +94,7 @@ resource "aws_network_interface" "natgw_private" {
 }
 
 # Routes
-resource "aws_route" "nat_route" {
+resource "aws_route" "private_subs" {
   count                  = length(var.private_route_table_ids)
   route_table_id         = var.private_route_table_ids[count.index]
   destination_cidr_block = "0.0.0.0/0"
@@ -152,7 +153,7 @@ data "aws_ami" "immagine-arm64" {
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "natgw_logs" {
   name              = "/aws/ec2/natgw/logs"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
 }
 
 # EC2 Instance
