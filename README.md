@@ -8,7 +8,7 @@
   - [Configurazione](#configurazione)
   - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
   - [Configurazione IAM](#configurazione-iam)
-- [Dettagli dello Script User Data](#dettagli-dello-script-user-data)
+- [Dettagli dello Script User Data Default](#dettagli-dello-script-user-data-default)
   - [Aggiornamenti di Sistema e Pacchetti](#aggiornamenti-di-sistema-e-pacchetti)
   - [Configurazione di Rete](#configurazione-di-rete)
   - [Regole di Sicurezza](#regole-di-sicurezza)
@@ -73,9 +73,9 @@ Crea un ruolo IAM con:
 - Permessi per CloudWatch Agent
 - Accesso a Systems Manager (SSM)
 
-## Dettagli dello Script User Data
+## Dettagli dello Script User Data Default
 
-Lo script user data (natgw01_userdata.sh) esegue le seguenti configurazioni:
+Lo script [default_userdata.sh](./ec2_conf/default_userdata.sh) esegue le seguenti configurazioni:
 
 ### Aggiornamenti di Sistema e Pacchetti
 
