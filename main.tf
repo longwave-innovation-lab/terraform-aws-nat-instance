@@ -152,7 +152,7 @@ data "aws_ami" "immagine-arm64" {
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "natgw_logs" {
   name              = "/aws/ec2/natgw/logs"
-  retention_in_days = 7
+  retention_in_days = var.log_retention_days
 }
 
 # EC2 Instance

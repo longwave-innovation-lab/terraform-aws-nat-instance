@@ -41,6 +41,12 @@ variable "user_data_script" {
   default     = ""
 }
 
+variable "log_retention_days" {
+  type        = string
+  default     = 7
+  description = "Log retention in days"
+}
+
 # variable "ami_owner" {
 #   description = "id owner ami"
 #   type        = string
