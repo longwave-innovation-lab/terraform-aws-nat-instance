@@ -36,9 +36,9 @@ variable "instance_type" {
 }
 
 variable "user_data_script" {
-  description = "Path to the user data script"
+  description = "Path to the custom user data script. By default the Nat Instance/s use [this userdata](https://github.com/Longwave-innovation/terraform-aws-nat-instance/blob/main/ec2_conf/default_userdata.sh)"
   type        = string
-  default     = "./userdata.sh"
+  default     = ""
 }
 
 # variable "ami_owner" {
