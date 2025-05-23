@@ -45,7 +45,7 @@ module "vpc" {
 }
 
 module "nat_gateway" {
-  count                   = var.vpc_natgw == 0 ? 0 : (var.vpc_natgw == 1 || var.vpc_natgw == 2 ? 1 : 1)
+  count                   = var.vpc_natgw == 0 ? 1 : (var.vpc_natgw == 1 || var.vpc_natgw == 2 ? 1 : 1)
   source                  = "../../"
   vpc_id                  = module.vpc.vpc_id
   public_subnet_ids       = module.vpc.public_subnets

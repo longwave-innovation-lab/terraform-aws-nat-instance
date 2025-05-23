@@ -94,7 +94,7 @@ resource "aws_network_interface" "natgw_private" {
 }
 
 # Routes
-resource "aws_route" "nat_route" {
+resource "aws_route" "private_subs" {
   count                  = length(var.private_route_table_ids)
   route_table_id         = var.private_route_table_ids[count.index]
   destination_cidr_block = "0.0.0.0/0"
