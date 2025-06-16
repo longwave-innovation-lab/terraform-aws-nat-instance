@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v0.2.1...v0.2.2) (2025-06-16)
+
+
+### Bug Fixes
+
+* added IAM permission for NAT instance to perform DescribeVpcs AND added static route to enable return traffic for VPC CIDR block ([93f6157](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/93f615782eabcada386f8855444b08b229ab43a4))
+
 ## [0.2.1](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v0.2.0...v0.2.1) (2025-05-23)
 
 
