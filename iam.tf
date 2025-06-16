@@ -34,3 +34,26 @@ resource "aws_iam_role_policy_attachment" "ssm-nat-policy2" {
   role       = aws_iam_role.ec2-nat-ssm-cloudwatch.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
+
+
+# add policy to describe in userdata
+resource "aws_iam_role_policy" "ec2-describe-network-policy" {
+  name   = "${var.name_prefix}-describe-network-policy"
+  role   = aws_iam_role.ec2-nat-ssm-cloudwatch.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeVpcs",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeRouteTables",
+          "ec2:DescribeInternetGateways"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
