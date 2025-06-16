@@ -44,6 +44,45 @@ else
     echo "Nessuna seconda interfaccia trovata"
 fi
 
+TOKEN=$(curl --request PUT "http://169.254.169.254/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
+REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region --header "X-aws-ec2-metadata-token: $TOKEN")
+VPC_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/mac)/vpc-id)
+# Ottieni il CIDR dell'intera VPC
+echo "Recovering CIDR for VPC: $VPC_ID"
+log_status "Recovering CIDR for VPC: $VPC_ID"
+VPC_CIDR=$(aws ec2 describe-vpcs --region $REGION --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
+PRIVATE_GATEWAY=$(ip route show dev $PRIVATE_INTERFACE | grep "default via" | awk '{print $3}')
+ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE
+
+
+cat <<EOF > /etc/systemd/system/custom-routes.service
+[Unit]
+Description=Add custom routes
+After=network-online.target systemd-networkd.service
+Wants=network-online.target
+Requires=systemd-networkd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Ricarica systemd per riconoscere il nuovo servizio
+systemctl daemon-reexec
+systemctl daemon-reload
+
+# Abilita il servizio all'avvio
+systemctl enable custom-routes.service
+
+# Avvia il servizio subito (opzionale)
+systemctl start custom-routes.service
+
 
 # # Permetti traffico in ingresso sull'interfaccia privata
 # sudo iptables -A INPUT -i $PRIVATE_INTERFACE -j ACCEPT
