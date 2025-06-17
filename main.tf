@@ -8,20 +8,20 @@ locals {
 
 # SSH Key Generation
 resource "tls_private_key" "pk_nat" {
-  count       = var.create_ssh_keys ? 1 : 0
+  count     = var.create_ssh_keys ? 1 : 0
   algorithm = "RSA"
   rsa_bits  = 4096
 }
 
 resource "aws_key_pair" "rsa_nat" {
-  count       = var.create_ssh_keys ? 1 : 0
+  count      = var.create_ssh_keys ? 1 : 0
   key_name   = "${var.name_prefix}-ssh-key-natgateway"
   public_key = tls_private_key.pk_nat[0].public_key_openssh
 }
 
 resource "aws_ssm_parameter" "nat_instance_ssh_key" {
   count       = var.create_ssh_keys ? local.nat_instance_count : 0
-  name        = "/${var.name_prefix}/ec2-nat-sshkey-${count.index + 1}"
+  name        = "/nat-instances/${var.name_prefix}-natgw-${count.index + 1}-ssh-key"
   description = "Chiave privata SSH per la ec2-nat ${count.index + 1}"
   type        = "SecureString"
   value       = tls_private_key.pk_nat[0].private_key_pem
