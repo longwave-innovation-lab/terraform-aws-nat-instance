@@ -8,21 +8,23 @@ locals {
 
 # SSH Key Generation
 resource "tls_private_key" "pk_nat" {
+  count     = var.create_ssh_keys ? 1 : 0
   algorithm = "RSA"
   rsa_bits  = 4096
 }
 
 resource "aws_key_pair" "rsa_nat" {
+  count      = var.create_ssh_keys ? 1 : 0
   key_name   = "${var.name_prefix}-ssh-key-natgateway"
-  public_key = tls_private_key.pk_nat.public_key_openssh
+  public_key = tls_private_key.pk_nat[0].public_key_openssh
 }
 
 resource "aws_ssm_parameter" "nat_instance_ssh_key" {
-  count       = local.nat_instance_count
-  name        = "/${var.name_prefix}/ec2-nat-sshkey-${count.index + 1}"
+  count       = var.create_ssh_keys ? local.nat_instance_count : 0
+  name        = "/nat-instances/${var.name_prefix}-natgw-${count.index + 1}-ssh-key"
   description = "Chiave privata SSH per la ec2-nat ${count.index + 1}"
   type        = "SecureString"
-  value       = tls_private_key.pk_nat.private_key_pem
+  value       = tls_private_key.pk_nat[0].private_key_pem
 }
 
 # Security Groups
@@ -165,7 +167,7 @@ module "ec2_natgw" {
   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
   ami                  = data.aws_ami.immagine-arm64.id
   instance_type        = var.instance_type
-  key_name             = aws_key_pair.rsa_nat.key_name
+  key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
   cpu_credits          = "unlimited"
   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
 

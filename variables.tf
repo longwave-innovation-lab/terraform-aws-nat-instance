@@ -35,6 +35,12 @@ variable "instance_type" {
   default     = "t4g.nano"
 }
 
+variable "create_ssh_keys" {
+  type        = bool
+  default     = false
+  description = "Create ssh keys for the NAT instance/s"
+}
+
 variable "user_data_script" {
   description = "Path to the custom user data script. By default the Nat Instance/s use [this userdata](https://github.com/Longwave-innovation/terraform-aws-nat-instance/blob/main/ec2_conf/default_userdata.sh)"
   type        = string
