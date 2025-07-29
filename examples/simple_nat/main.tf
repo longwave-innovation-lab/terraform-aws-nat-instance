@@ -5,7 +5,7 @@
 
 module "vpc" {
   source                = "terraform-aws-modules/vpc/aws"
-  version               = "5.21.0"                                # Verifica l'ultima versione disponibile
+  version               = "6.0.1"                                 # Verifica l'ultima versione disponibile
   name                  = "VPC-${random_string.random_id.result}" # non deve iniziare con un numero!!!!
   cidr                  = "192.168.0.0/19"
   azs                   = ["${var.aws_region}a", "${var.aws_region}b"] # Sostituisci con le tue zone di disponibilità
