@@ -53,6 +53,32 @@ variable "log_retention_days" {
   description = "Log retention in days"
 }
 
+variable "disk_configuration" {
+  type = object({
+    delete_on_termination = optional(bool),
+    encrypted             = optional(bool),
+    iops                  = optional(number),
+    kms_key_id            = optional(string),
+    tags                  = optional(map(string)),
+    throughput            = optional(number),
+    size                  = optional(number),
+    type                  = optional(string)
+  })
+  default = {
+    delete_on_termination = true,
+    type                  = "gp3",
+    encrypted             = true,
+    size                  = 30
+  }
+  description = "Disk configuration for NAT instances"
+}
+
+variable "credits_mode" {
+  type        = string
+  default     = "unlimited"
+  description = "Credits mode for NAT instances. Can be `standard` or `unlimited`"
+}
+
 # variable "ami_owner" {
 #   description = "id owner ami"
 #   type        = string

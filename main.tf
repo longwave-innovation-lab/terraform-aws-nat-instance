@@ -161,35 +161,28 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
 # EC2 Instance
 module "ec2_natgw" {
   source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "5.8.0"
+  version = "6.0.2"
 
   count                = local.nat_instance_count
   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
   ami                  = data.aws_ami.immagine-arm64.id
   instance_type        = var.instance_type
   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
-  cpu_credits          = "unlimited"
+  cpu_credits          = var.credits_mode
   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
-
-  network_interface = [
-    {
+  root_block_device    = var.disk_configuration
+  # user_data            = filebase64("${local.userdata_script_path}")
+  user_data_base64 = filebase64("${local.userdata_script_path}")
+  network_interface = {
+    "public-${count.index}" = {
       device_index         = 0
       network_interface_id = aws_network_interface.natgw_public[count.index].id
     },
-    {
+    "private-${count.index}" = {
       device_index         = 1
       network_interface_id = aws_network_interface.natgw_private[count.index].id
     }
-  ]
-
-  root_block_device = [
-    {
-      volume_size           = 30
-      volume_type           = "gp3"
-      delete_on_termination = true
-    }
-  ]
-  user_data = filebase64("${local.userdata_script_path}")
+  }
 }
 
 
