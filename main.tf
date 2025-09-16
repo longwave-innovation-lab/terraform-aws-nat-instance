@@ -162,7 +162,7 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
 # EC2 Instance
 module "ec2_natgw" {
   source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "6.1.1"
+  version = "5.8.0"
 
   count                = local.nat_instance_count
   name                 = "${var.name_prefix}-natgw-${count.index + 1}"

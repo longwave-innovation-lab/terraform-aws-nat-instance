@@ -55,5 +55,7 @@ module "nat_gateway" {
   nat_instance_per_az     = true # true per una istanza ogni AZ,  false per una singola istanza NAT
   instance_type           = var.instance_type
   user_data_script        = "./natgw01_userdata.sh" # script personalizzato con impostazioni iptables e cloudwatch
+  ami_id = "ami-0adb87b81434a4f85"
+  enable_cloudwatch_logs = false
 }
 
