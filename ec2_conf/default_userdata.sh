@@ -236,6 +236,10 @@ REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region --head
 INSTANCETYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type  --header "X-aws-ec2-metadata-token: $TOKEN")
 INSTANCEID=$INSTANCE_ID
 
+
+
+%{ if enable_cloudwatch_logs }
+
 tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null <<EOL
 {
   "agent": {
@@ -311,6 +315,73 @@ tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/nul
    }
 }
 EOL
+
+%{ else }
+
+tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null <<EOL
+{
+  "agent": {
+    "run_as_user": "root",
+    "omit_hostname":true,
+    "metrics_collection_interval":60,
+    "debug":false
+  },
+  "metrics":{
+      "namespace":"Custom/EC2",
+      "metrics_collected":{
+         "disk":{
+            "measurement":[
+              {
+                  "name": "used_percent",
+                  "rename": "disk_used_percent",
+                  "unit": "Percent"
+               }
+            ],
+            "drop_device": true,
+            "append_dimensions":{
+                        "InstanceId":"${INSTANCEID}",
+                        "InstanceType":"${INSTANCETYPE}"
+            },
+            "metrics_collection_interval":60,
+            "resources":[
+               "/"
+            ]
+         },
+         "mem":{
+            "measurement":[
+            {
+               "name": "used_percent",
+               "rename": "memory_used_percent",
+               "unit": "Percent"
+            }
+            ],
+	    "append_dimensions":{
+                        "InstanceId":"${INSTANCEID}",
+                        "InstanceType":"${INSTANCETYPE}"
+            },
+            "metrics_collection_interval":60
+         },
+         "swap":{
+            "measurement":[
+               {
+               "name": "used_percent",
+               "rename": "swap_used_percent",
+               "unit": "Percent"
+               }
+            ],
+	    "append_dimensions":{
+                        "InstanceId":"${INSTANCEID}",
+                        "InstanceType":"${INSTANCETYPE}"
+            },
+            "metrics_collection_interval":60
+         }
+      }
+   }
+}
+EOL
+
+%{ endif }
+
 
 # Avvia l'agente CloudWatch
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json

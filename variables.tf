@@ -23,6 +23,11 @@ variable "name_prefix" {
   type        = string
 }
 
+variable "ami_id" {
+  description = "id of ami"
+  type        = string
+}
+
 variable "nat_instance_per_az" {
   description = "Whether to create a NAT instance per AZ or a single NAT instance for all AZs"
   type        = bool
@@ -51,6 +56,11 @@ variable "log_retention_days" {
   type        = string
   default     = 7
   description = "Log retention in days"
+}
+
+variable "enable_cloudwatch_logs" {
+  description = "Enable CloudWatch logging for NAT instances"
+  type        = bool
 }
 
 # variable "ami_owner" {

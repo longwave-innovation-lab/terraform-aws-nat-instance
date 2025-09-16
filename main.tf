@@ -135,25 +135,26 @@ locals {
   architecture = local.is_arm ? "arm" : "x86"                    # Se è ARM, usa "arm64", altrimenti "x86_64"
 }
 
-# AMI Data Source
-data "aws_ami" "immagine-arm64" {
-  most_recent = true
+# # AMI Data Source
+# data "aws_ami" "immagine-arm64" {
+#   most_recent = true
 
-  filter {
-    name   = "name"
-    values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")] # Default ARM se non trova valore
-  }
+#   filter {
+#     name   = "name"
+#     values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")] # Default ARM se non trova valore
+#   }
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  owners = ["amazon"]
-  #owners = ["${var.ami_owner}"]
-}
+#   filter {
+#     name   = "virtualization-type"
+#     values = ["hvm"]
+#   }
+#   owners = ["amazon"]
+#   #owners = ["${var.ami_owner}"]
+# }
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "natgw_logs" {
+  count             = var.enable_cloudwatch_logs ? 1 : 0
   name              = "/aws/ec2/natgw/logs"
   retention_in_days = var.log_retention_days
 }
@@ -161,15 +162,21 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
 # EC2 Instance
 module "ec2_natgw" {
   source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "5.8.0"
+  version = "6.1.1"
 
   count                = local.nat_instance_count
   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
-  ami                  = data.aws_ami.immagine-arm64.id
+  ami                  = var.ami_id
   instance_type        = var.instance_type
   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
   cpu_credits          = "unlimited"
   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
+
+  # Enable IMDSv2
+  metadata_options = {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
 
   network_interface = [
     {
@@ -187,9 +194,14 @@ module "ec2_natgw" {
       volume_size           = 30
       volume_type           = "gp3"
       delete_on_termination = true
+      encrypted             = true
     }
   ]
-  user_data = filebase64("${local.userdata_script_path}")
+  user_data = base64encode(templatefile("${local.userdata_script_path}", {
+  enable_cloudwatch_logs = var.enable_cloudwatch_logs
+}))
+
+#  user_data = filebase64("${local.userdata_script_path}")
 }
 
 
