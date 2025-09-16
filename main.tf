@@ -198,7 +198,6 @@ module "ec2_natgw" {
     }
   ]
   user_data = base64encode(templatefile("${local.userdata_script_path}", {
-  enable_cloudwatch_logs = var.enable_cloudwatch_logs
 }))
 
 #  user_data = filebase64("${local.userdata_script_path}")
