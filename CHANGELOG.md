@@ -1,3 +1,14 @@
+## [1.0.0](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v0.3.0...v1.0.0) (2025-07-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* support AWS >= 6.0.0 and terraform >= 1.5.7 closes #9
+
+### Features
+
+* support AWS >= 6.0.0 and terraform >= 1.5.7 closes [#9](https://github.com/Longwave-innovation/terraform-aws-nat-instance/issues/9) ([5bc3717](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/5bc3717d08f809456f25ffe895184bfc794e3090))
+
 ## [0.3.0](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v0.2.2...v0.3.0) (2025-06-17)
 
 
@@ -34,11 +45,4 @@
 ### Features
 
 * now the nat has a default userdata script with the option to overwrite it ([c689a68](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/c689a68a8f4d43d07f0703f36e408888f1e58802))
-
-## [0.1.0](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/915f9c8ce6b7e2ec8577a0138ca11c6aa4149f8e...v0.1.0) (2025-05-22)
-
-
-### Features
-
-* first release as a terraform module ([915f9c8](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/915f9c8ce6b7e2ec8577a0138ca11c6aa4149f8e))
 
