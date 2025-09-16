@@ -162,7 +162,7 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
 # EC2 Instance
 module "ec2_natgw" {
   source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "5.8.0"
+  version = "6.1.1"
 
   count                = local.nat_instance_count
   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
@@ -178,25 +178,25 @@ module "ec2_natgw" {
     http_tokens   = "required"
   }
 
-  network_interface = [
-    {
-      device_index         = 0
-      network_interface_id = aws_network_interface.natgw_public[count.index].id
-    },
-    {
-      device_index         = 1
-      network_interface_id = aws_network_interface.natgw_private[count.index].id
-    }
-  ]
+network_interface = {
+  "0" = {
+    device_index         = 0
+    network_interface_id = aws_network_interface.natgw_public[count.index].id
+  },
+  "1" = {
+    device_index         = 1
+    network_interface_id = aws_network_interface.natgw_private[count.index].id
+  }
+}
 
-  root_block_device = [
-    {
-      volume_size           = 20
-      volume_type           = "gp3"
-      delete_on_termination = true
-      encrypted             = true
-    }
-  ]
+root_block_device = {
+  volume_size           = 20
+  volume_type           = "gp3"
+  delete_on_termination = true
+  encrypted             = true
+}
+
+  
   user_data = base64encode(templatefile("${local.userdata_script_path}", {
 }))
 
