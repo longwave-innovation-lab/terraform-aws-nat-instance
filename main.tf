@@ -3,7 +3,13 @@
 locals {
   az_count             = length(var.public_subnet_ids)
   nat_instance_count   = var.nat_instance_per_az ? local.az_count : 1
-  userdata_script_path = var.user_data_script != "" ? var.user_data_script : "${path.module}/ec2_conf/default_userdata.sh"
+    userdata_script_path = var.user_data_script != "" ? var.user_data_script : (
+    var.enable_cloudwatch_logs ? 
+    "${path.module}/ec2_conf/default_userdata_log_enable.sh" : 
+    "${path.module}/ec2_conf/default_userdata_log_disable.sh"
+  )
+
+  #userdata_script_path = var.user_data_script != "" ? var.user_data_script : "${path.module}/ec2_conf/default_userdata.sh"
 }
 
 # SSH Key Generation
@@ -196,14 +202,7 @@ root_block_device = {
   encrypted             = true
 }
 
-  
-user_data = base64encode(templatefile("${local.userdata_script_path}", {
-  enable_cloudwatch_logs = var.enable_cloudwatch_logs
-}))
-
-
-
-#  user_data = filebase64("${local.userdata_script_path}")
+user_data = filebase64("${local.userdata_script_path}")
 }
 
 
