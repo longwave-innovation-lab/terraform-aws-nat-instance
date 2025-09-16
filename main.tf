@@ -1,9 +1,15 @@
 
 
 locals {
-  az_count             = length(var.public_subnet_ids)
-  nat_instance_count   = var.nat_instance_per_az ? local.az_count : 1
-  userdata_script_path = var.user_data_script != "" ? var.user_data_script : "${path.module}/ec2_conf/default_userdata.sh"
+  az_count           = length(var.public_subnet_ids)
+  nat_instance_count = var.nat_instance_per_az ? local.az_count : 1
+  userdata_script_path = var.user_data_script != "" ? var.user_data_script : (
+    var.enable_cloudwatch_logs ?
+    "${path.module}/ec2_conf/default_userdata_log_enable.sh" :
+    "${path.module}/ec2_conf/default_userdata_log_disable.sh"
+  )
+
+  #userdata_script_path = var.user_data_script != "" ? var.user_data_script : "${path.module}/ec2_conf/default_userdata.sh"
 }
 
 # SSH Key Generation
@@ -135,25 +141,26 @@ locals {
   architecture = local.is_arm ? "arm" : "x86"                    # Se è ARM, usa "arm64", altrimenti "x86_64"
 }
 
-# AMI Data Source
-data "aws_ami" "immagine-arm64" {
-  most_recent = true
+# # AMI Data Source
+# data "aws_ami" "immagine-arm64" {
+#   most_recent = true
 
-  filter {
-    name   = "name"
-    values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")] # Default ARM se non trova valore
-  }
+#   filter {
+#     name   = "name"
+#     values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")] # Default ARM se non trova valore
+#   }
 
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  owners = ["amazon"]
-  #owners = ["${var.ami_owner}"]
-}
+#   filter {
+#     name   = "virtualization-type"
+#     values = ["hvm"]
+#   }
+#   owners = ["amazon"]
+#   #owners = ["${var.ami_owner}"]
+# }
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "natgw_logs" {
+  count             = var.enable_cloudwatch_logs ? 1 : 0
   name              = "/aws/ec2/natgw/logs"
   retention_in_days = var.log_retention_days
 }
@@ -161,28 +168,37 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
 # EC2 Instance
 module "ec2_natgw" {
   source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "6.0.2"
+  version = "6.1.1"
 
   count                = local.nat_instance_count
   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
-  ami                  = data.aws_ami.immagine-arm64.id
+  ami                  = var.ami_id
   instance_type        = var.instance_type
   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
   cpu_credits          = var.credits_mode
   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
-  root_block_device    = var.disk_configuration
-  # user_data            = filebase64("${local.userdata_script_path}")
-  user_data_base64 = filebase64("${local.userdata_script_path}")
+
+  # Enable IMDSv2
+  metadata_options = {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
+
   network_interface = {
-    "public-${count.index}" = {
+    "0" = {
       device_index         = 0
       network_interface_id = aws_network_interface.natgw_public[count.index].id
     },
-    "private-${count.index}" = {
+    "1" = {
       device_index         = 1
       network_interface_id = aws_network_interface.natgw_private[count.index].id
     }
   }
+
+  root_block_device = var.disk_configuration
+
+  user_data_base64 = base64encode(file(local.userdata_script_path))
+
 }
 
 

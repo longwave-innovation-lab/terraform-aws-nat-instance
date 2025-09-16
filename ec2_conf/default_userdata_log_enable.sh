@@ -236,6 +236,9 @@ REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region --head
 INSTANCETYPE=$(curl -s http://169.254.169.254/latest/meta-data/instance-type  --header "X-aws-ec2-metadata-token: $TOKEN")
 INSTANCEID=$INSTANCE_ID
 
+
+
+
 tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null <<EOL
 {
   "agent": {
@@ -311,6 +314,8 @@ tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/nul
    }
 }
 EOL
+
+
 
 # Avvia l'agente CloudWatch
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json

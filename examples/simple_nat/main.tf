@@ -25,9 +25,14 @@ module "vpc" {
   # Se vpc_natgw è impostato su "2", allora enable_nat_gateway sarà impostato su true, 
   # single_nat_gateway su false e one_nat_gateway_per_az su true. Altrimenti, tutte 
   #le opzioni saranno impostate su false
-  enable_nat_gateway     = var.vpc_natgw == 0 ? false : true
-  single_nat_gateway     = var.vpc_natgw == 2 ? false : var.vpc_natgw == 1 ? true : false
-  one_nat_gateway_per_az = var.vpc_natgw == 2 ? true : false
+  # enable_nat_gateway     = var.vpc_natgw == 0 ? false : true
+  # single_nat_gateway     = var.vpc_natgw == 2 ? false : var.vpc_natgw == 1 ? true : false
+  # one_nat_gateway_per_az = var.vpc_natgw == 2 ? true : false
+
+  enable_nat_gateway     = var.vpc_natgw_service_type == "MANAGED" ? true : false
+  single_nat_gateway     = var.vpc_natgw_distribution == "SINGLE" ? true : false
+  one_nat_gateway_per_az = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
+
   ## One NAT Gateway per VPC
   # enable_nat_gateway = true
   # single_nat_gateway = true
@@ -45,15 +50,16 @@ module "vpc" {
 }
 
 module "nat_gateway" {
-  count                   = var.vpc_natgw == 0 ? 1 : (var.vpc_natgw == 1 || var.vpc_natgw == 2 ? 1 : 1)
+  count                   = var.vpc_natgw_service_type == "NAT_INSTANCE" ? 1 : 0
   source                  = "../../"
   vpc_id                  = module.vpc.vpc_id
   public_subnet_ids       = module.vpc.public_subnets
   private_subnet_ids      = module.vpc.private_subnets
   private_route_table_ids = module.vpc.private_route_table_ids
   name_prefix             = local.name_prefix
-  nat_instance_per_az     = true # true per una istanza ogni AZ,  false per una singola istanza NAT
+  nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
-  user_data_script        = "./natgw01_userdata.sh" # script personalizzato con impostazioni iptables e cloudwatch
+  ami_id                  = var.ami_id
+  enable_cloudwatch_logs  = false
 }
 

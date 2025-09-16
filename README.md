@@ -217,7 +217,7 @@ Implementa regole iptables per:
 
 | Name | Source | Version |
 |------|--------|---------|
-| <a name="module_ec2_natgw"></a> [ec2\_natgw](#module\_ec2\_natgw) | terraform-aws-modules/ec2-instance/aws | 6.0.2 |
+| <a name="module_ec2_natgw"></a> [ec2\_natgw](#module\_ec2\_natgw) | terraform-aws-modules/ec2-instance/aws | 6.1.1 |
 
 ## Resources
 
@@ -239,20 +239,21 @@ Implementa regole iptables per:
 | [aws_security_group.natgw_public](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
 | [aws_ssm_parameter.nat_instance_ssh_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
 | [tls_private_key.pk_nat](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
-| [aws_ami.immagine-arm64](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
+| <a name="input_enable_cloudwatch_logs"></a> [enable\_cloudwatch\_logs](#input\_enable\_cloudwatch\_logs) | Enable CloudWatch logging for NAT instances | `bool` | n/a | yes |
 | <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Random name prefix for resources | `string` | n/a | yes |
 | <a name="input_private_route_table_ids"></a> [private\_route\_table\_ids](#input\_private\_route\_table\_ids) | List of private route table IDs | `list(string)` | n/a | yes |
 | <a name="input_private_subnet_ids"></a> [private\_subnet\_ids](#input\_private\_subnet\_ids) | List of private subnet IDs | `list(string)` | n/a | yes |
 | <a name="input_public_subnet_ids"></a> [public\_subnet\_ids](#input\_public\_subnet\_ids) | List of public subnet IDs | `list(string)` | n/a | yes |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC | `string` | n/a | yes |
+| <a name="input_ami_id"></a> [ami\_id](#input\_ami\_id) | id of ami | `string` | `""` | no |
 | <a name="input_create_ssh_keys"></a> [create\_ssh\_keys](#input\_create\_ssh\_keys) | Create ssh keys for the NAT instance/s | `bool` | `false` | no |
 | <a name="input_credits_mode"></a> [credits\_mode](#input\_credits\_mode) | Credits mode for NAT instances. Can be `standard` or `unlimited` | `string` | `"unlimited"` | no |
-| <a name="input_disk_configuration"></a> [disk\_configuration](#input\_disk\_configuration) | Disk configuration for NAT instances | <pre>object({<br/>    delete_on_termination = optional(bool),<br/>    encrypted             = optional(bool),<br/>    iops                  = optional(number),<br/>    kms_key_id            = optional(string),<br/>    tags                  = optional(map(string)),<br/>    throughput            = optional(number),<br/>    size                  = optional(number),<br/>    type                  = optional(string)<br/>  })</pre> | <pre>{<br/>  "delete_on_termination": true,<br/>  "encrypted": true,<br/>  "size": 30,<br/>  "type": "gp3"<br/>}</pre> | no |
+| <a name="input_disk_configuration"></a> [disk\_configuration](#input\_disk\_configuration) | Disk configuration for NAT instances | <pre>object({<br/>    delete_on_termination = optional(bool),<br/>    encrypted             = optional(bool),<br/>    iops                  = optional(number),<br/>    kms_key_id            = optional(string),<br/>    tags                  = optional(map(string)),<br/>    throughput            = optional(number),<br/>    size                  = optional(number),<br/>    type                  = optional(string)<br/>  })</pre> | <pre>{<br/>  "delete_on_termination": true,<br/>  "encrypted": true,<br/>  "size": 20,<br/>  "type": "gp3"<br/>}</pre> | no |
 | <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | EC2 instance type for NAT instances | `string` | `"t4g.nano"` | no |
 | <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention in days | `string` | `7` | no |
 | <a name="input_nat_instance_per_az"></a> [nat\_instance\_per\_az](#input\_nat\_instance\_per\_az) | Whether to create a NAT instance per AZ or a single NAT instance for all AZs | `bool` | `false` | no |
