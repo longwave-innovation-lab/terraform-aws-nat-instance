@@ -26,6 +26,7 @@ variable "name_prefix" {
 variable "ami_id" {
   description = "id of ami"
   type        = string
+  default     = ""
 }
 
 variable "nat_instance_per_az" {
