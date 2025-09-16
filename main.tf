@@ -202,7 +202,7 @@ root_block_device = {
   encrypted             = true
 }
 
-user_data = filebase64("${local.userdata_script_path}")
+user_data_base64  = base64encode("${local.userdata_script_path}")
 }
 
 
