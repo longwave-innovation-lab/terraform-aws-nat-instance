@@ -5,7 +5,7 @@
 
 module "vpc" {
   source                = "terraform-aws-modules/vpc/aws"
-  version               = "5.21.0"                                # Verifica l'ultima versione disponibile
+  version               = "6.0.1"                                 # Verifica l'ultima versione disponibile
   name                  = "VPC-${random_string.random_id.result}" # non deve iniziare con un numero!!!!
   cidr                  = "192.168.0.0/19"
   azs                   = ["${var.aws_region}a", "${var.aws_region}b"] # Sostituisci con le tue zone di disponibilità
@@ -57,7 +57,7 @@ module "nat_gateway" {
   private_subnet_ids      = module.vpc.private_subnets
   private_route_table_ids = module.vpc.private_route_table_ids
   name_prefix             = local.name_prefix
-  nat_instance_per_az     = true # true per una istanza ogni AZ,  false per una singola istanza NAT
+  nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
   ami_id                  = var.ami_id
   enable_cloudwatch_logs  = false

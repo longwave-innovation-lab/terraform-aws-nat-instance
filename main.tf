@@ -1,11 +1,11 @@
 
 
 locals {
-  az_count             = length(var.public_subnet_ids)
-  nat_instance_count   = var.nat_instance_per_az ? local.az_count : 1
-    userdata_script_path = var.user_data_script != "" ? var.user_data_script : (
-    var.enable_cloudwatch_logs ? 
-    "${path.module}/ec2_conf/default_userdata_log_enable.sh" : 
+  az_count           = length(var.public_subnet_ids)
+  nat_instance_count = var.nat_instance_per_az ? local.az_count : 1
+  userdata_script_path = var.user_data_script != "" ? var.user_data_script : (
+    var.enable_cloudwatch_logs ?
+    "${path.module}/ec2_conf/default_userdata_log_enable.sh" :
     "${path.module}/ec2_conf/default_userdata_log_disable.sh"
   )
 
@@ -175,7 +175,7 @@ module "ec2_natgw" {
   ami                  = var.ami_id
   instance_type        = var.instance_type
   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
-  cpu_credits          = "unlimited"
+  cpu_credits          = var.credits_mode
   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
 
   # Enable IMDSv2
@@ -184,25 +184,20 @@ module "ec2_natgw" {
     http_tokens   = "required"
   }
 
-network_interface = {
-  "0" = {
-    device_index         = 0
-    network_interface_id = aws_network_interface.natgw_public[count.index].id
-  },
-  "1" = {
-    device_index         = 1
-    network_interface_id = aws_network_interface.natgw_private[count.index].id
+  network_interface = {
+    "0" = {
+      device_index         = 0
+      network_interface_id = aws_network_interface.natgw_public[count.index].id
+    },
+    "1" = {
+      device_index         = 1
+      network_interface_id = aws_network_interface.natgw_private[count.index].id
+    }
   }
-}
 
-root_block_device = {
-  volume_size           = 20
-  volume_type           = "gp3"
-  delete_on_termination = true
-  encrypted             = true
-}
+  root_block_device = var.disk_configuration
 
-user_data_base64 = base64encode(file(local.userdata_script_path))
+  user_data_base64 = base64encode(file(local.userdata_script_path))
 
 }
 
