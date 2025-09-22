@@ -101,11 +101,11 @@ resource "aws_route" "private_subs" {
 }
 
 
-# Elastic IP for instance
+# Elastic IP for instance primary network interface
 resource "aws_eip" "nat_eip" {
-  count    = local.nat_instance_count
-  instance = aws_instance.nat_instance[count.index].id
-  domain   = "vpc"
+  count             = local.nat_instance_count
+  network_interface = aws_instance.nat_instance[count.index].primary_network_interface_id
+  domain            = "vpc"
 
   tags = {
     Name = "${var.name_prefix}-natgw-${count.index + 1}-az-${element(["a", "b", "c"], count.index)}"
