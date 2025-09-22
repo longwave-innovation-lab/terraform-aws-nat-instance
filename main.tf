@@ -78,16 +78,7 @@ resource "aws_security_group" "natgw_private" {
   }
 }
 
-# Network Interfaces
-resource "aws_network_interface" "natgw_public" {
-  count       = local.nat_instance_count
-  subnet_id   = var.public_subnet_ids[count.index]
-  description = "Public ENI for ${var.name_prefix}-eth0-natgw-${count.index + 1}"
 
-  tags = {
-    Name = "${var.name_prefix}-eth0-natgw-${count.index + 1}-public"
-  }
-}
 
 resource "aws_network_interface" "natgw_private" {
   count             = local.nat_instance_count
@@ -110,23 +101,18 @@ resource "aws_route" "private_subs" {
 }
 
 
-# Elastic IP
+# Elastic IP for instance
 resource "aws_eip" "nat_eip" {
-  count             = local.nat_instance_count
-  domain            = "vpc"
-  network_interface = aws_network_interface.natgw_public[count.index].id
+  count    = local.nat_instance_count
+  instance = aws_instance.nat_instance[count.index].id
+  domain   = "vpc"
 
   tags = {
     Name = "${var.name_prefix}-natgw-${count.index + 1}-az-${element(["a", "b", "c"], count.index)}"
   }
 }
 
-# Security Group Attachment
-resource "aws_network_interface_sg_attachment" "natgw_public_sg_attachment" {
-  count                = local.nat_instance_count
-  security_group_id    = aws_security_group.natgw_public[count.index].id
-  network_interface_id = aws_network_interface.natgw_public[count.index].id
-}
+
 
 locals {
   ami_values = {
@@ -207,6 +193,10 @@ resource "aws_instance" "nat_instance" {
   key_name               = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
   iam_instance_profile   = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
   user_data_base64       = base64encode(file(local.userdata_script_path))
+  
+  # Launch in public subnet
+  subnet_id              = var.public_subnet_ids[count.index]
+  vpc_security_group_ids = [aws_security_group.natgw_public[count.index].id]
 
   # Enable IMDSv2
   metadata_options {
@@ -218,12 +208,6 @@ resource "aws_instance" "nat_instance" {
   credit_specification {
     cpu_credits = var.credits_mode
   }
-
-
-  # Network interfaces
-  # Primary network interface
-  primary_network_interface_id = aws_network_interface.natgw_public[count.index].id
-
 
   # Root block device
   root_block_device {
