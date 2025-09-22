@@ -62,6 +62,7 @@ variable "log_retention_days" {
 variable "enable_cloudwatch_logs" {
   description = "Enable CloudWatch logging for NAT instances"
   type        = bool
+  default     = false
 }
 
 variable "disk_configuration" {
