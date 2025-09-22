@@ -208,7 +208,7 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
 # EC2 Instance - Native Terraform Resources
 resource "aws_instance" "nat_instance" {
   count                  = local.nat_instance_count
-  ami                    = var.ami_id != "" ? var.ami_id : data.aws_ami.latest_ami.id
+  ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.latest_ami.id
   instance_type          = var.instance_type
   key_name               = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
   iam_instance_profile   = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
@@ -245,9 +245,9 @@ resource "aws_instance" "nat_instance" {
     Name = "${var.name_prefix}-natgw-${count.index + 1}"
   }
 
-  lifecycle {
-    ignore_changes = [ami]
-  }
+  # lifecycle {
+  #   ignore_changes = [ami]
+  # }
 }
 
 # Network Interface Attachment for private interface

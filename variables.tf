@@ -24,9 +24,9 @@ variable "name_prefix" {
 }
 
 variable "ami_id" {
-  description = "AMI ID for NAT instances. If empty, uses latest Amazon Linux 2023. To find AMI: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>"
+  description = "AMI ID for NAT instances. If null, uses latest Amazon Linux 2023. To find AMI: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-2023.*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>"
   type        = string
-  default     = ""
+  default     = null
 }
 
 variable "nat_instance_per_az" {
