@@ -219,6 +219,12 @@ resource "aws_instance" "nat_instance" {
     cpu_credits = var.credits_mode
   }
 
+
+  # Network interfaces
+  # Primary network interface
+  primary_network_interface_id = aws_network_interface.natgw_public[count.index].id
+
+
   # Root block device
   root_block_device {
     delete_on_termination = var.disk_configuration.delete_on_termination
@@ -240,19 +246,11 @@ resource "aws_instance" "nat_instance" {
   }
 }
 
-# Network Interface Attachments
-resource "aws_network_interface_attachment" "nat_public" {
-  count                = local.nat_instance_count
-  instance_id          = aws_instance.nat_instance[count.index].id
-  network_interface_id = aws_network_interface.natgw_public[count.index].id
-  device_index         = 0
-}
-
+# Network Interface Attachment for private interface
 resource "aws_network_interface_attachment" "nat_private" {
   count                = local.nat_instance_count
   instance_id          = aws_instance.nat_instance[count.index].id
   network_interface_id = aws_network_interface.natgw_private[count.index].id
   device_index         = 1
 }
-
 
