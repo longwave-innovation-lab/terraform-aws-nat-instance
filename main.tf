@@ -114,12 +114,21 @@ resource "aws_eip" "nat_eip" {
 
 
 
+# locals {
+#   ami_values = {
+#     "arm" = "al2023-ami-*-kernel-*-arm64"
+#     "x86" = "al2023-ami-*-kernel-*-x86_64"
+#   }
+# }
+
 locals {
   ami_values = {
-    "arm" = "al2023-ami-*-kernel-*-arm64"
-    "x86" = "al2023-ami-*-kernel-*-x86_64"
+    "arm" = "al2023-ami-2023.*-kernel-*-arm64"
+    "x86" = "al2023-ami-2023.*-kernel-*-x86_64"
   }
 }
+
+
 
 # Determina l'architettura in base al tipo di istanza
 locals {
@@ -127,19 +136,30 @@ locals {
   architecture = local.is_arm ? "arm" : "x86"                    # Se è ARM, usa "arm64", altrimenti "x86_64"
 }
 
-# AMI Data Source
+# AMI Data Source - Finds latest Amazon Linux 2023 AMI
+# AWS CLI commands to find AMI manually:
+# For ARM64: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>
+# For x86_64: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-x86_64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>
 data "aws_ami" "latest_ami" {
   most_recent = true
 
   filter {
     name   = "name"
-    values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")]
+    #values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")]
+    values = [local.is_arm ? "al2023-ami-2023.*-kernel-*-arm64" : "al2023-ami-2023.*-kernel-*-x86_64"]
+
   }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+
   owners = ["amazon"]
 }
 

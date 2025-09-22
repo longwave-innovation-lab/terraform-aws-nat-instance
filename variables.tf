@@ -24,7 +24,7 @@ variable "name_prefix" {
 }
 
 variable "ami_id" {
-  description = "id of ami"
+  description = "AMI ID for NAT instances. If empty, uses latest Amazon Linux 2023. To find AMI: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>"
   type        = string
   default     = ""
 }
@@ -80,7 +80,7 @@ variable "disk_configuration" {
     delete_on_termination = true,
     type                  = "gp3",
     encrypted             = true,
-    size                  = 30
+    size                  = 30 #snapshot ami required min 30GB of storage.
   }
   description = "Disk configuration for NAT instances"
 }
