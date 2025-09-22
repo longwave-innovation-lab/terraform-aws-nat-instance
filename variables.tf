@@ -79,7 +79,7 @@ variable "disk_configuration" {
     delete_on_termination = true,
     type                  = "gp3",
     encrypted             = true,
-    size                  = 20
+    size                  = 30
   }
   description = "Disk configuration for NAT instances"
 }
