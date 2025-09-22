@@ -1,7 +1,7 @@
 
 output "nat_instance_ids" {
   description = "IDs of the NAT EC2 instances"
-  value       = module.ec2_natgw[*].id
+  value       = aws_instance.nat_instance[*].id
 }
 
 output "nat_public_ips" {
@@ -12,8 +12,8 @@ output "nat_public_ips" {
 output "nat_instance_details" {
   description = "Details of NAT instances including ID and Public IP"
   value = [
-    for i in range(length(module.ec2_natgw)) : {
-      instance_id = module.ec2_natgw[i].id
+    for i in range(length(aws_instance.nat_instance)) : {
+      instance_id = aws_instance.nat_instance[i].id
       public_ip   = aws_eip.nat_eip[i].public_ip
     }
   ]

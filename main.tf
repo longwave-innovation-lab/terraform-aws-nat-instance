@@ -141,22 +141,21 @@ locals {
   architecture = local.is_arm ? "arm" : "x86"                    # Se è ARM, usa "arm64", altrimenti "x86_64"
 }
 
-# # AMI Data Source
-# data "aws_ami" "immagine-arm64" {
-#   most_recent = true
+# AMI Data Source
+data "aws_ami" "latest_ami" {
+  most_recent = true
 
-#   filter {
-#     name   = "name"
-#     values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")] # Default ARM se non trova valore
-#   }
+  filter {
+    name   = "name"
+    values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")]
+  }
 
-#   filter {
-#     name   = "virtualization-type"
-#     values = ["hvm"]
-#   }
-#   owners = ["amazon"]
-#   #owners = ["${var.ami_owner}"]
-# }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+  owners = ["amazon"]
+}
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "natgw_logs" {
@@ -165,40 +164,95 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
   retention_in_days = var.log_retention_days
 }
 
-# EC2 Instance
-module "ec2_natgw" {
-  source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "6.1.1"
+# EC2 Instance - Commented module
+# module "ec2_natgw" {
+#   source  = "terraform-aws-modules/ec2-instance/aws"
+#   version = "6.1.1"
+#
+#   count                = local.nat_instance_count
+#   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
+#   ami                  = var.ami_id
+#   instance_type        = var.instance_type
+#   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
+#   cpu_credits          = var.credits_mode
+#   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
+#
+#   # Enable IMDSv2
+#   metadata_options = {
+#     http_endpoint = "enabled"
+#     http_tokens   = "required"
+#   }
+#
+#   network_interface = {
+#     "0" = {
+#       device_index         = 0
+#       network_interface_id = aws_network_interface.natgw_public[count.index].id
+#     },
+#     "1" = {
+#       device_index         = 1
+#       network_interface_id = aws_network_interface.natgw_private[count.index].id
+#     }
+#   }
+#
+#   root_block_device = var.disk_configuration
+#
+#   user_data_base64 = base64encode(file(local.userdata_script_path))
+# }
 
-  count                = local.nat_instance_count
-  name                 = "${var.name_prefix}-natgw-${count.index + 1}"
-  ami                  = var.ami_id
-  instance_type        = var.instance_type
-  key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
-  cpu_credits          = var.credits_mode
-  iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
+# EC2 Instance - Native Terraform Resources
+resource "aws_instance" "nat_instance" {
+  count                  = local.nat_instance_count
+  ami                    = var.ami_id != "" ? var.ami_id : data.aws_ami.latest_ami.id
+  instance_type          = var.instance_type
+  key_name               = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
+  iam_instance_profile   = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
+  user_data_base64       = base64encode(file(local.userdata_script_path))
 
   # Enable IMDSv2
-  metadata_options = {
+  metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"
   }
 
-  network_interface = {
-    "0" = {
-      device_index         = 0
-      network_interface_id = aws_network_interface.natgw_public[count.index].id
-    },
-    "1" = {
-      device_index         = 1
-      network_interface_id = aws_network_interface.natgw_private[count.index].id
-    }
+  # CPU Credits for burstable instances
+  credit_specification {
+    cpu_credits = var.credits_mode
   }
 
-  root_block_device = var.disk_configuration
+  # Root block device
+  root_block_device {
+    delete_on_termination = var.disk_configuration.delete_on_termination
+    encrypted             = var.disk_configuration.encrypted
+    iops                  = var.disk_configuration.iops
+    kms_key_id            = var.disk_configuration.kms_key_id
+    throughput            = var.disk_configuration.throughput
+    volume_size           = var.disk_configuration.size
+    volume_type           = var.disk_configuration.type
+    tags                  = var.disk_configuration.tags
+  }
 
-  user_data_base64 = base64encode(file(local.userdata_script_path))
+  tags = {
+    Name = "${var.name_prefix}-natgw-${count.index + 1}"
+  }
 
+  lifecycle {
+    ignore_changes = [ami]
+  }
+}
+
+# Network Interface Attachments
+resource "aws_network_interface_attachment" "nat_public" {
+  count                = local.nat_instance_count
+  instance_id          = aws_instance.nat_instance[count.index].id
+  network_interface_id = aws_network_interface.natgw_public[count.index].id
+  device_index         = 0
+}
+
+resource "aws_network_interface_attachment" "nat_private" {
+  count                = local.nat_instance_count
+  instance_id          = aws_instance.nat_instance[count.index].id
+  network_interface_id = aws_network_interface.natgw_private[count.index].id
+  device_index         = 1
 }
 
 
