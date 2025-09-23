@@ -113,14 +113,6 @@ resource "aws_eip" "nat_eip" {
 }
 
 
-
-# locals {
-#   ami_values = {
-#     "arm" = "al2023-ami-*-kernel-*-arm64"
-#     "x86" = "al2023-ami-*-kernel-*-x86_64"
-#   }
-# }
-
 locals {
   ami_values = {
     "arm" = "al2023-ami-2023.*-kernel-*-arm64"
@@ -145,9 +137,7 @@ data "aws_ami" "latest_ami" {
 
   filter {
     name   = "name"
-    #values = [lookup(local.ami_values, local.architecture, "al2023-ami-*-kernel-*-arm64")]
     values = [local.is_arm ? "al2023-ami-2023.*-kernel-*-arm64" : "al2023-ami-2023.*-kernel-*-x86_64"]
-
   }
 
   filter {
@@ -170,50 +160,15 @@ resource "aws_cloudwatch_log_group" "natgw_logs" {
   retention_in_days = var.log_retention_days
 }
 
-# EC2 Instance - Commented module
-# module "ec2_natgw" {
-#   source  = "terraform-aws-modules/ec2-instance/aws"
-#   version = "6.1.1"
-#
-#   count                = local.nat_instance_count
-#   name                 = "${var.name_prefix}-natgw-${count.index + 1}"
-#   ami                  = var.ami_id
-#   instance_type        = var.instance_type
-#   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
-#   cpu_credits          = var.credits_mode
-#   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
-#
-#   # Enable IMDSv2
-#   metadata_options = {
-#     http_endpoint = "enabled"
-#     http_tokens   = "required"
-#   }
-#
-#   network_interface = {
-#     "0" = {
-#       device_index         = 0
-#       network_interface_id = aws_network_interface.natgw_public[count.index].id
-#     },
-#     "1" = {
-#       device_index         = 1
-#       network_interface_id = aws_network_interface.natgw_private[count.index].id
-#     }
-#   }
-#
-#   root_block_device = var.disk_configuration
-#
-#   user_data_base64 = base64encode(file(local.userdata_script_path))
-# }
-
 # EC2 Instance - Native Terraform Resources
 resource "aws_instance" "nat_instance" {
-  count                  = local.nat_instance_count
-  ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.latest_ami.id
-  instance_type          = var.instance_type
-  key_name               = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
-  iam_instance_profile   = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
-  user_data_base64       = base64encode(file(local.userdata_script_path))
-  
+  count                = local.nat_instance_count
+  ami                  = var.ami_id != null ? var.ami_id : data.aws_ami.latest_ami.id
+  instance_type        = var.instance_type
+  key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
+  iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
+  user_data_base64     = base64encode(file(local.userdata_script_path))
+
   # Launch in public subnet
   subnet_id              = var.public_subnet_ids[count.index]
   vpc_security_group_ids = [aws_security_group.natgw_public[count.index].id]
@@ -245,9 +200,6 @@ resource "aws_instance" "nat_instance" {
     Name = "${var.name_prefix}-natgw-${count.index + 1}"
   }
 
-  # lifecycle {
-  #   ignore_changes = [ami]
-  # }
 }
 
 # Network Interface Attachment for private interface

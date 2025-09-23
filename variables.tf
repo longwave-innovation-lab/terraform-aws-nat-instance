@@ -48,7 +48,7 @@ variable "create_ssh_keys" {
 }
 
 variable "user_data_script" {
-  description = "Path to the custom user data script. By default the Nat Instance/s use [this userdata](https://github.com/Longwave-innovation/terraform-aws-nat-instance/blob/main/ec2_conf/default_userdata.sh)"
+  description = "Path to the custom user data script. By default use /ec2_conf/default_userdata.sh"
   type        = string
   default     = ""
 }
@@ -90,13 +90,3 @@ variable "credits_mode" {
   default     = "unlimited"
   description = "Credits mode for NAT instances. Can be `standard` or `unlimited`"
 }
-
-# variable "ami_owner" {
-#   description = "id owner ami"
-#   type        = string
-# }
-
-# variable "instance_arch" {
-#   description = "architettura ec2"
-#   type        = string
-# }
