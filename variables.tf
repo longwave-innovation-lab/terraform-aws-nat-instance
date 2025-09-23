@@ -24,9 +24,9 @@ variable "name_prefix" {
 }
 
 variable "ami_id" {
-  description = "id of ami"
+  description = "AMI ID for NAT instances. If null, uses latest Amazon Linux 2023. To find AMI: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-2023.*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>"
   type        = string
-  default     = ""
+  default     = null
 }
 
 variable "nat_instance_per_az" {
@@ -48,7 +48,7 @@ variable "create_ssh_keys" {
 }
 
 variable "user_data_script" {
-  description = "Path to the custom user data script. By default the Nat Instance/s use [this userdata](https://github.com/Longwave-innovation/terraform-aws-nat-instance/blob/main/ec2_conf/default_userdata.sh)"
+  description = "Path to the custom user data script. By default use /ec2_conf/default_userdata.sh"
   type        = string
   default     = ""
 }
@@ -62,6 +62,7 @@ variable "log_retention_days" {
 variable "enable_cloudwatch_logs" {
   description = "Enable CloudWatch logging for NAT instances"
   type        = bool
+  default     = false
 }
 
 variable "disk_configuration" {
@@ -79,7 +80,7 @@ variable "disk_configuration" {
     delete_on_termination = true,
     type                  = "gp3",
     encrypted             = true,
-    size                  = 20
+    size                  = 30 #snapshot ami required min 30GB of storage.
   }
   description = "Disk configuration for NAT instances"
 }
@@ -89,13 +90,3 @@ variable "credits_mode" {
   default     = "unlimited"
   description = "Credits mode for NAT instances. Can be `standard` or `unlimited`"
 }
-
-# variable "ami_owner" {
-#   description = "id owner ami"
-#   type        = string
-# }
-
-# variable "instance_arch" {
-#   description = "architettura ec2"
-#   type        = string
-# }
