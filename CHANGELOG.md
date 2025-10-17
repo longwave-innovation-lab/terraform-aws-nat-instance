@@ -1,3 +1,12 @@
+## [1.0.3](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.2...v1.0.3) (2025-10-17)
+
+
+### Bug Fixes
+
+* added more logs and sleep at the start of user-data ([d5c6ba4](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/d5c6ba4c68822343cf91df8090a69fdd0172a515))
+* enablid release action on script change ([e0216e6](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/e0216e63f3b88c80b9641b44f6c9464b0890edc7))
+* minor change to make release happen ([bdd6b87](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/bdd6b87eb0e9e5c2d99521ac492a04f66ec97133))
+
 ## [1.0.2](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.1...v1.0.2) (2025-09-23)
 
 
@@ -39,11 +48,4 @@
 * **action:** test to fix action error ([b861510](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/b86151003b20c447e6d6e6458be4c3d66d97c0d5))
 * **ssh_keys:** parameter names for ssh keys now use instance names to be more linear ([d142746](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/d142746ce3cf797479600df257c47346128a2640))
 * **terraform-docs:** configuration to make it recursive ([f1a6afa](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/f1a6afade8ea2dff95179dae9cab98db8b0e435c))
-
-## [0.2.2](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v0.2.1...v0.2.2) (2025-06-16)
-
-
-### Bug Fixes
-
-* added IAM permission for NAT instance to perform DescribeVpcs AND added static route to enable return traffic for VPC CIDR block ([93f6157](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/93f615782eabcada386f8855444b08b229ab43a4))
 
