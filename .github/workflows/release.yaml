@@ -17,6 +17,7 @@ on:
     - '**.tf'
     - '**.tfvars'
     - '**.hcl'
+    - '**.sh'
     - '.terraform.lock.hcl'
 # env:
 #   IMAGE_NAME: ${{ github.repository }}
