@@ -1,4 +1,5 @@
 #!/bin/bash
+sleep 120
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
 log_status() {
@@ -14,18 +15,22 @@ dnf install -y amazon-ssm-agent
 systemctl enable amazon-ssm-agent
 systemctl start amazon-ssm-agent
 
-
+log_status "Installed all packaged needed"
 
 # Disable firewalld (Amazon Linux 2023 equivalent of nftables)
+log_status "Disabling firewall"
+
 systemctl disable firewalld
 systemctl stop firewalld
 
+log_status "Enable IP Forwarding"
 # Enable IP Forwarding
 echo "net.ipv4.ip_forward=1" | tee /etc/sysctl.d/99-ip-forward.conf
 chmod 644 /etc/sysctl.d/99-ip-forward.conf
 sysctl --system
 
 # Ottiene la lista delle interfacce di rete (escludendo lo e docker)
+log_status "Getting all ENI except Docker ones"
 INTERFACES=($(ls /sys/class/net | grep -v "lo\|docker"))
 # Salva la prima interfaccia nella variabile PUBLIC_INTERFACE
 PUBLIC_INTERFACE=${INTERFACES[0]}
@@ -44,6 +49,7 @@ else
     echo "Nessuna seconda interfaccia trovata"
 fi
 
+log_status "Getting metadata for VPC..."
 TOKEN=$(curl --request PUT "http://169.254.169.254/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
 REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region --header "X-aws-ec2-metadata-token: $TOKEN")
 VPC_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
@@ -57,6 +63,7 @@ PRIVATE_GATEWAY=$(ip route show dev $PRIVATE_INTERFACE | grep "default via" | aw
 ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE
 
 
+log_status "Creating static route"
 cat <<EOF > /etc/systemd/system/custom-routes.service
 [Unit]
 Description=Add custom routes
@@ -73,14 +80,17 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
 
+log_status "Restarting systemd for the new service"
 # Ricarica systemd per riconoscere il nuovo servizio
 systemctl daemon-reexec
 systemctl daemon-reload
 
 # Abilita il servizio all'avvio
+log_status "enablign new service on startup"
 systemctl enable custom-routes.service
 
 # Avvia il servizio subito (opzionale)
+log_status "Launching immediately the service"
 systemctl start custom-routes.service
 
 
@@ -122,11 +132,13 @@ systemctl start custom-routes.service
 
 
 # Permetti traffico in ingresso sull'interfaccia privata
+log_status "Enabling ingress traffic on private interface"
 sudo iptables -A INPUT -i $PRIVATE_INTERFACE -j ACCEPT
 sudo iptables -A INPUT -i $PRIVATE_INTERFACE -p icmp --icmp-type echo-request -j ACCEPT
 sudo iptables -A INPUT -i $PRIVATE_INTERFACE -p icmp --icmp-type echo-reply  -j ACCEPT
 
 # Logga il traffico che passa dall'interfaccia privata a quella pubblica
+log_status "Enabling traffic from private interface to public one"
 sudo iptables -I FORWARD 1 -i $PRIVATE_INTERFACE -o $PUBLIC_INTERFACE -j LOG --log-prefix "IPTables-PRIV-to-PUB: " --log-level 4
 sudo iptables -A FORWARD -i $PRIVATE_INTERFACE -o $PUBLIC_INTERFACE -j ACCEPT
 
@@ -134,19 +146,24 @@ sudo iptables -A FORWARD -i $PRIVATE_INTERFACE -o $PUBLIC_INTERFACE -j ACCEPT
 # sudo iptables -A FORWARD -i $PRIVATE_INTERFACE ! -o $PUBLIC_INTERFACE -j LOG --log-prefix "IPTables-NOT-PRIV-to-PUB: " --log-level 4
 
 # Permetti traffico in uscita sull'interfaccia pubblica
+log_status "Enabling egress traffic on public interface"
 sudo iptables -A OUTPUT -o $PUBLIC_INTERFACE -j ACCEPT
 
 # Permetti traffico in ingresso sull'interfaccia pubblica solo per connessioni stabilite e correlate
+log_status "Enabling ingress traffic on public interface on estrablished connection and correlated"
 sudo iptables -A INPUT -i $PUBLIC_INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
 sudo iptables -A FORWARD -i $PUBLIC_INTERFACE -o $PRIVATE_INTERFACE -m state --state RELATED,ESTABLISHED -j ACCEPT
 
 # Configurazione NAT (Masquerading) per consentire l'uscita dei pacchetti sulla pubblica
+log_status "Configuring NAT Masquerading for egress of packed on public interface"
 sudo iptables -t nat -A POSTROUTING -o $PUBLIC_INTERFACE -j MASQUERADE
 
 # Logging del traffico bloccato in ingresso sull'interfaccia privata
+log_status "Enabling logging of blocked ingress traffic on private interface"
 sudo iptables -A INPUT -i $PRIVATE_INTERFACE -j LOG --log-prefix "IPTables-Dropped-PRIVATE-IN: " --log-level 4
 
 # Logging del traffico bloccato in forward dall'interfaccia privata
+log_status "Enabling logging of blocked forward traffic on private interface"
 sudo iptables -A FORWARD -i $PRIVATE_INTERFACE -j LOG --log-prefix "IPTables-Dropped-PRIVATE-FWD: " --log-level 4
 
 # Blocca il traffico in ingresso sulla pubblica (dopo aver loggato solo quello rilevante)
@@ -210,6 +227,7 @@ cat <<EOF > /etc/rsyslog.d/10-iptables.conf
 & stop
 EOF
 
+log_status "Restarting rsyslog"
 systemctl restart rsyslog
 
 
