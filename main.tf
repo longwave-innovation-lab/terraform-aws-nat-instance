@@ -3,13 +3,12 @@
 locals {
   az_count           = length(var.public_subnet_ids)
   nat_instance_count = var.nat_instance_per_az ? local.az_count : 1
-  userdata_script_path = var.user_data_script != "" ? var.user_data_script : (
-    var.enable_cloudwatch_logs ?
-    "${path.module}/ec2_conf/default_userdata_log_enable.sh" :
-    "${path.module}/ec2_conf/default_userdata_log_disable.sh"
-  )
-
-  #userdata_script_path = var.user_data_script != "" ? var.user_data_script : "${path.module}/ec2_conf/default_userdata.sh"
+  
+  # Template variables for user data
+  userdata_template_vars = {
+    enable_cloudwatch_logs = var.enable_cloudwatch_logs
+    log_group_name        = var.enable_cloudwatch_logs ? aws_cloudwatch_log_group.natgw_logs[0].name : ""
+  }
 }
 
 # SSH Key Generation
@@ -167,7 +166,11 @@ resource "aws_instance" "nat_instance" {
   instance_type        = var.instance_type
   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
   iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
-  user_data_base64     = base64encode(file(local.userdata_script_path))
+  user_data_base64     = base64encode(
+    var.user_data_script != "" ? 
+    file(var.user_data_script) : 
+    templatefile("${path.module}/ec2_conf/userdata.tpl", local.userdata_template_vars)
+  )
 
   # Launch in public subnet
   subnet_id              = var.public_subnet_ids[count.index]

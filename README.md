@@ -8,7 +8,7 @@
   - [Configurazione](#configurazione)
   - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
   - [Configurazione IAM](#configurazione-iam)
-- [Dettagli dello Script User Data Default](#dettagli-dello-script-user-data-default)
+- [Dettagli dello Script User Data](#dettagli-dello-script-user-data)
   - [Aggiornamenti di Sistema e Pacchetti](#aggiornamenti-di-sistema-e-pacchetti)
   - [Configurazione di Rete](#configurazione-di-rete)
   - [Regole di Sicurezza](#regole-di-sicurezza)
@@ -73,9 +73,9 @@ Crea un ruolo IAM con:
 - Permessi per CloudWatch Agent
 - Accesso a Systems Manager (SSM)
 
-## Dettagli dello Script User Data Default
+## Dettagli dello Script User Data
 
-Lo script [default_userdata.sh](./ec2_conf/default_userdata.sh) esegue le seguenti configurazioni:
+Lo script [userdata.tpl](./ec2_conf/userdata.tpl) è un template Terraform che utilizza la funzione `templatefile` per configurare dinamicamente le istanze NAT. Il template esegue le seguenti configurazioni:
 
 ### Aggiornamenti di Sistema e Pacchetti
 
@@ -101,13 +101,13 @@ Implementa regole iptables per:
 
 ### Configurazione del Monitoraggio
 
-1. Configurazione CloudWatch Agent:
+1. Configurazione CloudWatch Agent (solo se `enable_cloudwatch_logs = true`):
    - Registra il traffico iptables
    - Raccoglie le metriche di sistema (CPU, memoria, disco) e le invia a Cloudwatch in una Custom Metric LW/EC2
-2. Gestione dei Log:
+2. Gestione dei Log (solo se abilitata):
    - Crea file di log dedicato per iptables
    - Configura la rotazione dei log (retention di 2 ore)
-   - Imposta lo streaming dei log su CloudWatch (retention di 7gg)
+   - Imposta lo streaming dei log su CloudWatch (retention configurabile)
 
 ## Note e Best Practices
 
