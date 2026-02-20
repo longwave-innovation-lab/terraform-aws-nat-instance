@@ -8,7 +8,7 @@
   - [Configurazione](#configurazione)
   - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
   - [Configurazione IAM](#configurazione-iam)
-- [Dettagli dello Script User Data Default](#dettagli-dello-script-user-data-default)
+- [Dettagli dello Script User Data](#dettagli-dello-script-user-data)
   - [Aggiornamenti di Sistema e Pacchetti](#aggiornamenti-di-sistema-e-pacchetti)
   - [Configurazione di Rete](#configurazione-di-rete)
   - [Regole di Sicurezza](#regole-di-sicurezza)
