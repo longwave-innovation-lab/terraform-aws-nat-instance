@@ -9,10 +9,17 @@
   - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
   - [Configurazione IAM](#configurazione-iam)
 - [Dettagli dello Script User Data Default](#dettagli-dello-script-user-data-default)
-  - [Aggiornamenti di Sistema e Pacchetti](#aggiornamenti-di-sistema-e-pacchetti)
-  - [Configurazione di Rete](#configurazione-di-rete)
-  - [Regole di Sicurezza](#regole-di-sicurezza)
-  - [Configurazione del Monitoraggio](#configurazione-del-monitoraggio)
+  - [Fasi di Inizializzazione](#fasi-di-inizializzazione)
+    - [1. Test di Connettività e Validazione](#1-test-di-connettività-e-validazione)
+    - [2. Aggiornamento Sistema e Installazione Pacchetti](#2-aggiornamento-sistema-e-installazione-pacchetti)
+    - [3. Configurazione IP Forwarding](#3-configurazione-ip-forwarding)
+    - [4. Identificazione Interfacce di Rete](#4-identificazione-interfacce-di-rete)
+    - [5. Configurazione Routing VPC](#5-configurazione-routing-vpc)
+    - [6. Configurazione nftables per Funzionalità NAT](#6-configurazione-nftables-per-funzionalità-nat)
+    - [7. Configurazione Logging (se enable\_cloudwatch\_logs = true)](#7-configurazione-logging-se-enable_cloudwatch_logs--true)
+    - [8. Configurazione CloudWatch Agent](#8-configurazione-cloudwatch-agent)
+  - [Variabili Template](#variabili-template)
+  - [File e Servizi Creati](#file-e-servizi-creati)
 - [Note e Best Practices](#note-e-best-practices)
 - [Troubleshooting](#troubleshooting)
 - [Requirements](#requirements)
@@ -73,41 +80,161 @@ Crea un ruolo IAM con:
 - Permessi per CloudWatch Agent
 - Accesso a Systems Manager (SSM)
 
-## Dettagli dello Script User Data
+## Dettagli dello Script User Data Default
 
-Lo script [userdata.tpl](./ec2_conf/userdata.tpl) è un template Terraform che utilizza la funzione `templatefile` per configurare dinamicamente le istanze NAT. Il template esegue le seguenti configurazioni:
+Lo script [userdata.tpl](./ec2_conf/userdata.tpl) è un template Terraform che utilizza la funzione `templatefile` per configurare dinamicamente le istanze NAT. Il template riceve due variabili:
 
-### Aggiornamenti di Sistema e Pacchetti
+- `enable_cloudwatch_logs`: Abilita/disabilita il logging su CloudWatch
+- `log_group_name`: Nome del log group CloudWatch (se abilitato)
 
-- Aggiorna i pacchetti di sistema
-- Installa iptables-persistent
-- Disabilita nftables
+### Fasi di Inizializzazione
 
-### Configurazione di Rete
+#### 1. Test di Connettività e Validazione
 
-1. Abilita l'IP forwarding
-2. Configura il rilevamento automatico delle interfacce
-3. Imposta il routing NAT:
-   - Permette l'inoltro tra interfacce private e pubbliche
-   - Implementa il masquerading per il traffico in uscita
+Prima di procedere con l'installazione, lo script esegue test di connettività per garantire che l'istanza possa raggiungere Internet:
 
-### Regole di Sicurezza
+- **Test connettività IP**: Verifica la raggiungibilità di 8.8.8.8 e 1.1.1.1 (minimo 3 risposte su 10 ping)
+- **Test risoluzione DNS**: Verifica la risoluzione di google.com e cloudflare.com
+- **Retry automatico**: Ogni test viene ripetuto fino a 2 volte con attesa di 60 secondi tra i tentativi
+- **Logging dettagliato**: Tutti i test vengono registrati in `/var/log/user-data.log`
 
-Implementa regole iptables per:
+Se i test falliscono, lo script termina con errore per evitare configurazioni incomplete.
 
-- Inoltro del traffico dall'interfaccia privata a quella pubblica
-- Blocco degli accessi non autorizzati dall'interfaccia pubblica
-- Logging dei flussi di traffico
+#### 2. Aggiornamento Sistema e Installazione Pacchetti
 
-### Configurazione del Monitoraggio
+Lo script installa i seguenti pacchetti con retry automatico in caso di fallimento:
 
-1. Configurazione CloudWatch Agent (solo se `enable_cloudwatch_logs = true`):
-   - Registra il traffico iptables
-   - Raccoglie le metriche di sistema (CPU, memoria, disco) e le invia a Cloudwatch in una Custom Metric LW/EC2
-2. Gestione dei Log (solo se abilitata):
-   - Crea file di log dedicato per iptables
-   - Configura la rotazione dei log (retention di 2 ore)
-   - Imposta lo streaming dei log su CloudWatch (retention configurabile)
+**Pacchetti Core:**
+- `traceroute`, `tcpdump`: Strumenti di diagnostica di rete
+- `amazon-cloudwatch-agent`: Agent per metriche e log CloudWatch
+- `logrotate`, `rsyslog`: Gestione e rotazione dei log
+- `nftables`: Framework per il firewall (sostituisce iptables)
+
+**Pacchetti Aggiuntivi:**
+- `amazon-ssm-agent`: Abilita l'accesso tramite AWS Systems Manager Session Manager
+
+Ogni installazione viene tentata fino a 2 volte con attesa di 30 secondi tra i tentativi.
+
+#### 3. Configurazione IP Forwarding
+
+Abilita permanentemente l'IP forwarding necessario per la funzionalità NAT:
+
+```bash
+net.ipv4.ip_forward=1
+```
+
+Il parametro viene salvato in `/etc/sysctl.d/99-ip-forward.conf` per persistere ai riavvii.
+
+#### 4. Identificazione Interfacce di Rete
+
+Lo script identifica automaticamente le interfacce di rete (escludendo loopback e Docker):
+
+- **PUBLIC_INTERFACE** (eth0/ens5): Prima interfaccia, connessa alla subnet pubblica
+- **PRIVATE_INTERFACE** (eth1/ens6): Seconda interfaccia, connessa alla subnet privata
+
+#### 5. Configurazione Routing VPC
+
+Recupera i metadati AWS per configurare il routing corretto:
+
+1. Ottiene il VPC ID dall'Instance Metadata Service (IMDSv2)
+2. Recupera il CIDR block del VPC tramite AWS CLI
+3. Aggiunge una route statica per il traffico VPC attraverso l'interfaccia privata
+4. Crea un servizio systemd (`custom-routes.service`) per rendere persistente la route
+
+#### 6. Configurazione nftables per Funzionalità NAT
+
+Lo script configura **nftables** (non iptables) con le seguenti regole:
+
+**Chain INPUT:**
+- Accetta tutto il traffico su loopback
+- Accetta tutto il traffico dall'interfaccia privata
+- Accetta solo traffico ESTABLISHED/RELATED dall'interfaccia pubblica
+- Accetta ICMP echo-request/reply dall'interfaccia privata
+- Logga e blocca tutto il resto (se logging abilitato)
+
+**Chain FORWARD:**
+- Permette il forward da interfaccia privata a pubblica
+- Permette il forward da pubblica a privata solo per connessioni ESTABLISHED/RELATED
+- Logga il traffico privato→pubblico (se logging abilitato)
+- Blocca tutto il resto
+
+**Chain OUTPUT:**
+- Permette tutto il traffico in uscita sull'interfaccia pubblica
+
+**Chain POSTROUTING (NAT):**
+- Applica masquerading su tutto il traffico in uscita dall'interfaccia pubblica
+
+Le regole vengono salvate in:
+- `/etc/nftables/nat-instance.nft`: Configurazione principale
+- `/etc/sysconfig/nftables.conf`: Copia per persistenza
+
+Un servizio systemd dedicato (`nftables-nat.service`) garantisce il caricamento automatico delle regole all'avvio.
+
+#### 7. Configurazione Logging (se enable_cloudwatch_logs = true)
+
+Quando il logging è abilitato, lo script configura:
+
+**File di Log Locale:**
+- Crea `/var/log/iptables.log` per i log nftables
+- Configura rsyslog per filtrare i messaggi con prefisso "NFTables-"
+- Imposta logrotate per rotazione oraria (mantiene solo 1 ora di log, max 10MB)
+
+**Prefissi Log nftables:**
+- `NFTables-PRIV-to-PUB:` - Traffico dalla subnet privata alla pubblica
+- `NFTables-Dropped-PRIVATE-IN:` - Traffico bloccato in ingresso su interfaccia privata
+- `NFTables-Dropped-FORWARD:` - Traffico bloccato in forward
+
+#### 8. Configurazione CloudWatch Agent
+
+Lo script configura sempre il CloudWatch Agent con le seguenti metriche custom:
+
+**Namespace:** `EC2/NATinstance`
+
+**Metriche Raccolte (intervallo 60 secondi):**
+- `disk_used_percent`: Percentuale di utilizzo disco (root filesystem)
+- `memory_used_percent`: Percentuale di utilizzo memoria RAM
+- `swap_used_percent`: Percentuale di utilizzo swap
+
+**Dimensioni Aggiunte:**
+- `InstanceId`: ID dell'istanza EC2
+- `InstanceType`: Tipo di istanza (es. t4g.nano)
+
+**Configurazione Log (solo se enable_cloudwatch_logs = true):**
+- Stream dei log da `/var/log/iptables.log` al log group specificato
+- Log stream nominato con l'Instance ID
+- Timezone: UTC
+
+Il file di configurazione viene salvato in:
+`/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json`
+
+### Variabili Template
+
+Il template supporta le seguenti variabili Terraform:
+
+| Variabile | Tipo | Descrizione |
+|-----------|------|-------------|
+| `enable_cloudwatch_logs` | bool | Abilita il logging nftables su CloudWatch |
+| `log_group_name` | string | Nome del CloudWatch Log Group (usato solo se logging abilitato) |
+
+### File e Servizi Creati
+
+**File di Configurazione:**
+- `/etc/sysctl.d/99-ip-forward.conf` - IP forwarding persistente
+- `/etc/nftables/nat-instance.nft` - Regole nftables
+- `/etc/sysconfig/nftables.conf` - Copia delle regole per persistenza
+- `/etc/rsyslog.d/10-nftables.conf` - Configurazione rsyslog per nftables
+- `/etc/logrotate.d/nat-traffic` - Rotazione log nftables
+- `/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json` - Configurazione CloudWatch Agent
+
+**Servizi Systemd:**
+- `custom-routes.service` - Mantiene le route statiche VPC
+- `nftables-nat.service` - Carica le regole nftables all'avvio
+- `amazon-ssm-agent.service` - Agent SSM per accesso remoto
+- `amazon-cloudwatch-agent.service` - Agent CloudWatch per metriche e log
+
+**File di Log:**
+- `/var/log/user-data.log` - Log di esecuzione dello script userdata
+- `/var/log/iptables.log` - Log del traffico nftables (se abilitato)
 
 ## Note e Best Practices
 
