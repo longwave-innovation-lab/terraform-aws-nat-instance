@@ -48,7 +48,7 @@ variable "create_ssh_keys" {
 }
 
 variable "user_data_script" {
-  description = "Path to the custom user data script. By default use /ec2_conf/default_userdata.sh"
+  description = "Path to the custom user data script. By default use /ec2_conf/userdata.tpl"
   type        = string
   default     = ""
 }
