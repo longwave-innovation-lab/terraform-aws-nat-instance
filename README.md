@@ -1,26 +1,26 @@
-# Modulo Terraform AWS NAT Gateway/Instance <!-- omit in toc -->
+# AWS NAT Gateway/Instance Terraform Module <!-- omit in toc -->
 
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-- [Caratteristiche Principali del modulo](#caratteristiche-principali-del-modulo)
-- [Architettura](#architettura)
-  - [Configurazione](#configurazione)
-  - [Gruppi di Sicurezza](#gruppi-di-sicurezza)
-  - [Configurazione IAM](#configurazione-iam)
-- [Dettagli dello Script User Data Default](#dettagli-dello-script-user-data-default)
-  - [Fasi di Inizializzazione](#fasi-di-inizializzazione)
-    - [1. Test di Connettività e Validazione](#1-test-di-connettivit%C3%A0-e-validazione)
-    - [2. Aggiornamento Sistema e Installazione Pacchetti](#2-aggiornamento-sistema-e-installazione-pacchetti)
-    - [3. Configurazione IP Forwarding](#3-configurazione-ip-forwarding)
-    - [4. Identificazione Interfacce di Rete](#4-identificazione-interfacce-di-rete)
-    - [5. Configurazione Routing VPC](#5-configurazione-routing-vpc)
-    - [6. Configurazione nftables per Funzionalità NAT](#6-configurazione-nftables-per-funzionalit%C3%A0-nat)
-    - [7. Configurazione Logging (se enable_cloudwatch_logs = true)](#7-configurazione-logging-se-enable_cloudwatch_logs--true)
-    - [8. Configurazione CloudWatch Agent](#8-configurazione-cloudwatch-agent)
-  - [Variabili Template](#variabili-template)
-  - [File e Servizi Creati](#file-e-servizi-creati)
-- [Note e Best Practices](#note-e-best-practices)
+- [Module Key Features](#module-key-features)
+- [Architecture](#architecture)
+  - [Configuration](#configuration)
+  - [Security Groups](#security-groups)
+  - [IAM Configuration](#iam-configuration)
+- [Default User Data Script Details](#default-user-data-script-details)
+  - [Initialization Steps](#initialization-steps)
+    - [1. Connectivity Test and Validation](#1-connectivity-test-and-validation)
+    - [2. System Update and Package Installation](#2-system-update-and-package-installation)
+    - [3. IP Forwarding Configuration](#3-ip-forwarding-configuration)
+    - [4. Network Interface Identification](#4-network-interface-identification)
+    - [5. VPC Routing Configuration](#5-vpc-routing-configuration)
+    - [6. nftables Configuration for NAT Functionality](#6-nftables-configuration-for-nat-functionality)
+    - [7. Logging Configuration (if `enable_cloudwatch_logs = true`)](#7-logging-configuration-if-enable_cloudwatch_logs--true)
+    - [8. CloudWatch Agent Configuration](#8-cloudwatch-agent-configuration)
+  - [Template Variables](#template-variables)
+  - [Created Files and Services](#created-files-and-services)
+- [Notes and Best Practices](#notes-and-best-practices)
 - [Troubleshooting](#troubleshooting)
 - [Requirements](#requirements)
 - [Providers](#providers)
@@ -31,297 +31,285 @@
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-Questo modulo Terraform offre un modo flessibile per gestire la Nat Instance nel tuo Virtual Private Cloud di AWS. Nell'esempio riporto come usare sia i NAT Gateway (gestiti da AWS) che le NAT Instance (istanze EC2 che fungono da NAT). Puoi scegliere tra un singolo NAT Gateway per l'intero VPC, un NAT Gateway per Availability Zone oppure utilizzare le NAT Instance.
+This Terraform module provides a flexible way to manage NAT Instances in your AWS Virtual Private Cloud (VPC). The example shows how to use both NAT Gateways (AWS-managed) and NAT Instances (EC2 instances acting as NAT). You can choose between a single NAT Gateway for the entire VPC, one NAT Gateway per Availability Zone, or using NAT Instances.
 
-La scelta tra le soluzioni viene gestita dinamicamente attraverso la variabile vpc_natgw.
+The selection is dynamically controlled via the `vpc_natgw` variable:
 
-Se vpc_natgw = 0: Viene creata una o piu NAT Instance personalizzate.
+- `vpc_natgw = 0`: Creates one or more custom NAT Instances.  
+- `vpc_natgw = 1`: Creates a single NAT Gateway for the entire VPC.  
+- `vpc_natgw = 2`: Creates a NAT Gateway for each Availability Zone (AZ).  
 
-Se vpc_natgw = 1: Viene creato un unico NAT Gateway per l'intero VPC.
+## Module Key Features
 
-Se vpc_natgw = 2: Viene creato un NAT Gateway per ogni zona di disponibilità (AZ).
+- Flexible deployment options (single-AZ or multi-AZ)  
+- Automatic routing table configuration  
+- Integration with CloudWatch for monitoring and logging  
+- Full security group management  
+- ARM and x86 architecture support  
+- Automatic iptables/nftables configuration and logging to CloudWatch  
+- SSM profile enabled on NAT Instance to also use it as a bastion host or for reverse port forwarding  
+- Private SSH key saved to AWS Parameter Store and locally  
 
-## Caratteristiche Principali del modulo
+## Architecture
 
-- Opzioni di implementazione flessibili (single-AZ o multi-AZ)
-- Configurazione automatica delle tabelle di routing
-- Integrazione con CloudWatch per monitoraggio e logging
-- Gestione completa dei gruppi di sicurezza
-- Supporto per architetture ARM e x86
-- Configurazione e logging automatici di iptables su Cloudwatch
-- Attivazione profilo SSM su Nat Instance per utilizzarlo anche come bastion host o reverse port forwarding.
-- Salvataggio chiave private SSH su servizio AWS Parametr Store e locale
+### Configuration
 
-## Architettura
+- NAT instances with dual network interfaces:  
+  - `eth0`: Public interface in the public subnet  
+  - `eth1`: Private interface in the private subnet  
+- Source/destination check disabled on private interface  
+- Elastic IPs associated with public interfaces  
+- Amazon Linux 2023 OS  
 
-### Configurazione
+### Security Groups
 
-- Implementa istanze NAT con doppia interfaccia di rete:
-  - eth0: Interfaccia pubblica nella subnet pubblica
-  - eth1: Interfaccia privata nella subnet privata
-- Configura il controllo source/destination disabilitato sull'interfaccia privata
-- Associa IP elastici alle interfacce pubbliche
-- OS Amazon Linux 2023
+1. Public Interface (`eth0`):  
+   - Allows all outbound traffic  
+   - Restricts inbound traffic to established connections  
 
-### Gruppi di Sicurezza
+2. Private Interface (`eth1`):  
+   - Allows all inbound traffic from private subnets  
+   - Allows all outbound traffic  
 
-1. Interfaccia Pubblica (eth0):
-   - Permette tutto il traffico in uscita
-   - Limita il traffico in ingresso alle connessioni stabilite
+### IAM Configuration
 
-2. Interfaccia Privata (eth1):
-   - Permette tutto il traffico in ingresso dalle subnet private
-   - Permette tutto il traffico in uscita
+Creates an IAM role with:  
 
-### Configurazione IAM
+- Permissions for CloudWatch Agent  
+- Access to Systems Manager (SSM)  
 
-Crea un ruolo IAM con:
+## Default User Data Script Details
 
-- Permessi per CloudWatch Agent
-- Accesso a Systems Manager (SSM)
+The script [`userdata.tpl`](./ec2_conf/userdata.tpl) is a Terraform template using `templatefile` to dynamically configure NAT instances. It receives two variables:
 
-## Dettagli dello Script User Data Default
+- `enable_cloudwatch_logs`: Enable/disable CloudWatch logging  
+- `log_group_name`: CloudWatch log group name (if enabled)  
 
-Lo script [userdata.tpl](./ec2_conf/userdata.tpl) è un template Terraform che utilizza la funzione `templatefile` per configurare dinamicamente le istanze NAT. Il template riceve due variabili:
+### Initialization Steps
 
-- `enable_cloudwatch_logs`: Abilita/disabilita il logging su CloudWatch
-- `log_group_name`: Nome del log group CloudWatch (se abilitato)
+#### 1. Connectivity Test and Validation
 
-### Fasi di Inizializzazione
+Before installation, the script runs connectivity tests to ensure the instance can reach the Internet:
 
-#### 1. Test di Connettività e Validazione
+- **IP connectivity test**: Checks reachability to 8.8.8.8 and 1.1.1.1 (minimum 3 successful pings out of 10)  
+- **DNS resolution test**: Checks resolution for google.com and cloudflare.com  
+- **Automatic retries**: Up to 2 retries with 60 seconds between attempts  
+- **Detailed logging**: All tests logged to `/var/log/user-data.log`  
 
-Prima di procedere con l'installazione, lo script esegue test di connettività per garantire che l'istanza possa raggiungere Internet:
+If tests fail, the script exits with an error to avoid incomplete configuration.  
 
-- **Test connettività IP**: Verifica la raggiungibilità di 8.8.8.8 e 1.1.1.1 (minimo 3 risposte su 10 ping)
-- **Test risoluzione DNS**: Verifica la risoluzione di google.com e cloudflare.com
-- **Retry automatico**: Ogni test viene ripetuto fino a 2 volte con attesa di 60 secondi tra i tentativi
-- **Logging dettagliato**: Tutti i test vengono registrati in `/var/log/user-data.log`
+#### 2. System Update and Package Installation
 
-Se i test falliscono, lo script termina con errore per evitare configurazioni incomplete.
+Installs the following packages with automatic retry:
 
-#### 2. Aggiornamento Sistema e Installazione Pacchetti
+**Core Packages:**  
+- `traceroute`, `tcpdump` – Network diagnostics  
+- `amazon-cloudwatch-agent` – CloudWatch metrics and logging  
+- `logrotate`, `rsyslog` – Log management  
+- `nftables` – Firewall framework (replaces iptables)  
 
-Lo script installa i seguenti pacchetti con retry automatico in caso di fallimento:
+**Additional Packages:**  
+- `amazon-ssm-agent` – Enables AWS Systems Manager access  
 
-**Pacchetti Core:**
-- `traceroute`, `tcpdump`: Strumenti di diagnostica di rete
-- `amazon-cloudwatch-agent`: Agent per metriche e log CloudWatch
-- `logrotate`, `rsyslog`: Gestione e rotazione dei log
-- `nftables`: Framework per il firewall (sostituisce iptables)
+Retries up to 2 times with 30 seconds delay.
 
-**Pacchetti Aggiuntivi:**
-- `amazon-ssm-agent`: Abilita l'accesso tramite AWS Systems Manager Session Manager
+#### 3. IP Forwarding Configuration
 
-Ogni installazione viene tentata fino a 2 volte con attesa di 30 secondi tra i tentativi.
-
-#### 3. Configurazione IP Forwarding
-
-Abilita permanentemente l'IP forwarding necessario per la funzionalità NAT:
+Enables permanent IP forwarding for NAT functionality:
 
 ```bash
 net.ipv4.ip_forward=1
 ```
 
-Il parametro viene salvato in `/etc/sysctl.d/99-ip-forward.conf` per persistere ai riavvii.
+Saved in `/etc/sysctl.d/99-ip-forward.conf` for persistence.
 
-#### 4. Identificazione Interfacce di Rete
+#### 4. Network Interface Identification
 
-Lo script identifica automaticamente le interfacce di rete (escludendo loopback e Docker):
+The script automatically identifies network interfaces (excluding loopback and Docker):
 
-- **PUBLIC_INTERFACE** (eth0/ens5): Prima interfaccia, connessa alla subnet pubblica
-- **PRIVATE_INTERFACE** (eth1/ens6): Seconda interfaccia, connessa alla subnet privata
+- **PUBLIC_INTERFACE** (`eth0/ens5`): first interface, connected to the public subnet  
+- **PRIVATE_INTERFACE** (`eth1/ens6`): second interface, connected to the private subnet  
 
-#### 5. Configurazione Routing VPC
+#### 5. VPC Routing Configuration
 
-Recupera i metadati AWS per configurare il routing corretto:
+Retrieves AWS metadata to configure correct routing:
 
-1. Ottiene il VPC ID dall'Instance Metadata Service (IMDSv2)
-2. Recupera il CIDR block del VPC tramite AWS CLI
-3. Aggiunge una route statica per il traffico VPC attraverso l'interfaccia privata
-4. Crea un servizio systemd (`custom-routes.service`) per rendere persistente la route
+1. Retrieves VPC ID from Instance Metadata Service (IMDSv2)  
+2. Retrieves VPC CIDR block via AWS CLI  
+3. Adds a static route for VPC traffic via the private interface  
+4. Creates a systemd service (`custom-routes.service`) to make the route persistent  
 
-#### 6. Configurazione nftables per Funzionalità NAT
+#### 6. nftables Configuration for NAT Functionality
 
-Lo script configura **nftables** (non iptables) con le seguenti regole:
+Configures **nftables** with the following chains:
 
-**Chain INPUT:**
-- Accetta tutto il traffico su loopback
-- Accetta tutto il traffico dall'interfaccia privata
-- Accetta solo traffico ESTABLISHED/RELATED dall'interfaccia pubblica
-- Accetta ICMP echo-request/reply dall'interfaccia privata
-- Logga e blocca tutto il resto (se logging abilitato)
+**INPUT Chain:**  
+- Accept all loopback traffic  
+- Accept all traffic from private interface  
+- Accept only ESTABLISHED/RELATED traffic from public interface  
+- Accept ICMP echo-request/reply from private interface  
+- Logs and drops all other traffic (if logging enabled)  
 
-**Chain FORWARD:**
-- Permette il forward da interfaccia privata a pubblica
-- Permette il forward da pubblica a privata solo per connessioni ESTABLISHED/RELATED
-- Logga il traffico privato→pubblico (se logging abilitato)
-- Blocca tutto il resto
+**FORWARD Chain:**  
+- Forward from private → public interface  
+- Forward from public → private only for ESTABLISHED/RELATED connections  
+- Logs private→public traffic if logging enabled  
+- Drops all other traffic  
 
-**Chain OUTPUT:**
-- Permette tutto il traffico in uscita sull'interfaccia pubblica
+**OUTPUT Chain:**  
+- Allow all outbound traffic on the public interface  
 
-**Chain POSTROUTING (NAT):**
-- Applica masquerading su tutto il traffico in uscita dall'interfaccia pubblica
+**POSTROUTING (NAT) Chain:**  
+- Applies masquerading to all outbound traffic from the public interface  
 
-Le regole vengono salvate in:
-- `/etc/nftables/nat-instance.nft`: Configurazione principale
-- `/etc/sysconfig/nftables.conf`: Copia per persistenza
+Rules are saved to:
 
-Un servizio systemd dedicato (`nftables-nat.service`) garantisce il caricamento automatico delle regole all'avvio.
+- `/etc/nftables/nat-instance.nft` – main configuration  
+- `/etc/sysconfig/nftables.conf` – persistent copy  
 
-#### 7. Configurazione Logging (se enable_cloudwatch_logs = true)
+A systemd service (`nftables-nat.service`) ensures rules are automatically loaded at boot.
 
-Quando il logging è abilitato, lo script configura:
+#### 7. Logging Configuration (if `enable_cloudwatch_logs = true`)
 
-**File di Log Locale:**
-- Crea `/var/log/iptables.log` per i log nftables
-- Configura rsyslog per filtrare i messaggi con prefisso "NFTables-"
-- Imposta logrotate per rotazione oraria (mantiene solo 1 ora di log, max 10MB)
+If enabled:
 
-**Prefissi Log nftables:**
-- `NFTables-PRIV-to-PUB:` - Traffico dalla subnet privata alla pubblica
-- `NFTables-Dropped-PRIVATE-IN:` - Traffico bloccato in ingresso su interfaccia privata
-- `NFTables-Dropped-FORWARD:` - Traffico bloccato in forward
+- **Local log file:** `/var/log/iptables.log`  
+- rsyslog filters messages with the prefix `NFTables-`  
+- Logrotate rotates hourly (keeps 1 hour, max 10MB)  
 
-#### 8. Configurazione CloudWatch Agent
+**Log prefixes:**  
+- `NFTables-PRIV-to-PUB:` – traffic from private → public  
+- `NFTables-Dropped-PRIVATE-IN:` – dropped inbound private traffic  
+- `NFTables-Dropped-FORWARD:` – dropped forward traffic  
 
-Lo script configura sempre il CloudWatch Agent con le seguenti metriche custom:
+#### 8. CloudWatch Agent Configuration
 
-**Namespace:** `EC2/NATinstance`
+CloudWatch Agent is configured with custom metrics:
 
-**Metriche Raccolte (intervallo 60 secondi):**
-- `disk_used_percent`: Percentuale di utilizzo disco (root filesystem)
-- `memory_used_percent`: Percentuale di utilizzo memoria RAM
-- `swap_used_percent`: Percentuale di utilizzo swap
+- **Namespace:** `EC2/NATinstance`  
+- **Metrics (interval 60s):** `disk_used_percent`, `memory_used_percent`, `swap_used_percent`  
+- **Dimensions:** `InstanceId`, `InstanceType`  
+- **Log streaming (if enabled):** `/var/log/iptables.log` → CloudWatch log group  
 
-**Dimensioni Aggiunte:**
-- `InstanceId`: ID dell'istanza EC2
-- `InstanceType`: Tipo di istanza (es. t4g.nano)
-
-**Configurazione Log (solo se enable_cloudwatch_logs = true):**
-- Stream dei log da `/var/log/iptables.log` al log group specificato
-- Log stream nominato con l'Instance ID
-- Timezone: UTC
-
-Il file di configurazione viene salvato in:
+Configuration is saved to:  
 `/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json`
 
-### Variabili Template
+### Template Variables
 
-Il template supporta le seguenti variabili Terraform:
+| Variable | Type | Description |
+|----------|------|-------------|
+| `enable_cloudwatch_logs` | bool | Enable nftables CloudWatch logging |
+| `log_group_name` | string | CloudWatch log group name (used only if logging enabled) |
 
-| Variabile | Tipo | Descrizione |
-|-----------|------|-------------|
-| `enable_cloudwatch_logs` | bool | Abilita il logging nftables su CloudWatch |
-| `log_group_name` | string | Nome del CloudWatch Log Group (usato solo se logging abilitato) |
+### Created Files and Services
 
-### File e Servizi Creati
+**Configuration Files:**  
+- `/etc/sysctl.d/99-ip-forward.conf` – IP forwarding  
+- `/etc/nftables/nat-instance.nft` – nftables rules  
+- `/etc/sysconfig/nftables.conf` – persistent rules  
+- `/etc/rsyslog.d/10-nftables.conf` – rsyslog config  
+- `/etc/logrotate.d/nat-traffic` – log rotation  
+- `/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json` – CloudWatch agent  
 
-**File di Configurazione:**
-- `/etc/sysctl.d/99-ip-forward.conf` - IP forwarding persistente
-- `/etc/nftables/nat-instance.nft` - Regole nftables
-- `/etc/sysconfig/nftables.conf` - Copia delle regole per persistenza
-- `/etc/rsyslog.d/10-nftables.conf` - Configurazione rsyslog per nftables
-- `/etc/logrotate.d/nat-traffic` - Rotazione log nftables
-- `/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json` - Configurazione CloudWatch Agent
+**Systemd Services:**  
+- `custom-routes.service` – maintain static VPC routes  
+- `nftables-nat.service` – load nftables rules on boot  
+- `amazon-ssm-agent.service` – SSM access  
+- `amazon-cloudwatch-agent.service` – metrics/logs  
 
-**Servizi Systemd:**
-- `custom-routes.service` - Mantiene le route statiche VPC
-- `nftables-nat.service` - Carica le regole nftables all'avvio
-- `amazon-ssm-agent.service` - Agent SSM per accesso remoto
-- `amazon-cloudwatch-agent.service` - Agent CloudWatch per metriche e log
+**Log Files:**  
+- `/var/log/user-data.log` – script execution logs  
+- `/var/log/iptables.log` – nftables traffic logs (if enabled)  
 
-**File di Log:**
-- `/var/log/user-data.log` - Log di esecuzione dello script userdata
-- `/var/log/iptables.log` - Log del traffico nftables (se abilitato)
+## Notes and Best Practices
 
-## Note e Best Practices
+1. High Availability
+   - For production environments, consider enabling nat_instance_per_az or nat gateway service
+   - Implement appropriate monitoring and alerting
 
-1. Alta Disponibilità
-   - Per ambienti di produzione, considerare l'attivazione di nat_instance_per_az o servizio nat gateway
-   - Implementare monitoraggio e alerting appropriati
-
-2. LOG Ipatbles
-   - i log all'interno delle istanze NAT sono salvati in /var/log/iptables.log
+2. Iptables Logs
+   - logs inside NAT instances are saved in /var/log/iptables.log
 
 3. Cloudwatch Configuration
-   - la configurazione dell'agente cloudwatch è salvato in /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+   - the cloudwatch agent configuration is saved in /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
 ## Troubleshooting
 
-1. Ping da Nat instance usando interfaccia privata
-  
-   ```sh
-   ping -I ens5 -c 4 8.8.8.8
-   ```
+1. Ping from NAT instance using private interface
 
-2. Controllo tabella di routing
-  
-   ```sh
-   ip route show
-   ```
+  ```sh
+  ping -I ens5 -c 4 8.8.8.8
+  ```
 
-3. Controllare se l'IP forwarding è attivo
+2. Check routing table
 
-   ```sh
-   sysctl net.ipv4.ip_forward
-   ```
+  ```sh
+  ip route show
+  ```
 
-   Se il valore è 0, riattivalo con:
+3. Check if IP forwarding is enabled
 
-   ```sh
-   echo 1 > /proc/sys/net/ipv4/ip_forward
-   ```
+  ```sh
+  sysctl net.ipv4.ip_forward
+  ```
 
-   > **ATTENZIONE**: verificare che nel file di configurazione ci sia solo
+   If the value is 0, reactivate it with:
+
+  ```sh
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+  ```
+
+   > **WARNING**: verify that the configuration file contains only
    > <br>**net.ipv4.ip_forward=1**
-   > <br>Se diverso (es. **net.ipv4.ip_forward=1**) potrebbe dare dei problemi.
+   > <br>If different (e.g. **net.ipv4.ip_forward=1**) it might cause issues.
 
-4. Controllare le regole iptables attive
+4. Check active iptables rules
 
-      iptables -L -v -n
+  ```sh
+  iptables -L -v -n
+  ```
 
-5. Controllare le regole iptables attive per il NAT
+5. Check active iptables rules for NAT
 
-   ```sh
-   iptables -t nat -L -v -n
-   ```
+  ```sh
+  iptables -t nat -L -v -n
+  ```
 
-6. iptables reset contatori visibili con il comando iptables -L -v -n
+6. iptables reset counters visible with the command iptables -L -v -n
 
-   ```sh
-   iptables -Z
-   ```
+  ```sh
+  iptables -Z
+  ```
 
-7. Controllare il traffico in tempo reale con tcpdump
-   <br>Per verificare se i pacchetti ICMP (ping) arrivano alla NAT instance:
+7. Monitor traffic in real-time with tcpdump
+   <br>To verify if ICMP packets (ping) reach the NAT instance:
+   instance:
 
    ```sh
    tcpdump -i $PRIVATE_INTERFACE icmp
    ```
 
-   Per vedere se il traffico sta passando correttamente tra le interfacce:
+   To see if traffic is passing correctly between interfaces:
 
    ```sh
    tcpdump -i $PUBLIC_INTERFACE icmp
    ```
 
-   monitorare tutto il traffico su una specifica interfaccia
+   monitor all traffic on a specific interface
 
    ```sh
    tcpdump -i $PRIVATE_INTERFACE
    ```
 
-8. Controllare i log di iptables
+8. Check iptables logs
 
    ```sh
    tail -f /var/log/iptables.log`
    ```
 
-9. Per vedere quali connessioni sono attualmente stabilite attraverso la NAT instance:
+9. To see which connections are currently established through the NAT instance:
 
-   ```sh
+  ```sh
    netstat -nat
    ```
 
@@ -331,7 +319,7 @@ Il template supporta le seguenti variabili Terraform:
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.0.0 |
+| <a name="requirement_aws"></a> aws #requirement\_aws | >= 6.0.0 |
 
 ## Providers
 
@@ -348,48 +336,87 @@ No modules.
 
 | Name | Type |
 |------|------|
-| [aws_cloudwatch_log_group.natgw_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
+| [aws_cloudwatch_log_group.natgw_logs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/
+cloudwatch_log_group) | resource |
 | [aws_eip.nat_eip](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
-| [aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile) | resource |
-| [aws_iam_role.ec2-nat-ssm-cloudwatch](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
-| [aws_iam_role_policy.ec2-describe-network-policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy) | resource |
-| [aws_iam_role_policy_attachment.cloudwatch-nat-logs-policy2](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
-| [aws_iam_role_policy_attachment.ssm-nat-policy2](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
-| [aws_instance.nat_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance) | resource |
-| [aws_key_pair.rsa_nat](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/key_pair) | resource |
-| [aws_network_interface.natgw_private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/network_interface) | resource |
-| [aws_network_interface_attachment.nat_private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/network_interface_attachment) | resource |
-| [aws_route.private_subs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) | resource |
-| [aws_security_group.natgw_private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
-| [aws_security_group.natgw_public](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
-| [aws_ssm_parameter.nat_instance_ssh_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [tls_private_key.pk_nat](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
-| [aws_ami.latest_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
+| [aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile](https://registry.terraform.io/providers/
+hashicorp/aws/latest/docs/resources/iam_instance_profile) | resource |
+| [aws_iam_role.ec2-nat-ssm-cloudwatch](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/
+iam_role) | resource |
+| [aws_iam_role_policy.ec2-describe-network-policy](https://registry.terraform.io/providers/hashicorp/aws/latest/
+docs/resources/iam_role_policy) | resource |
+| [aws_iam_role_policy_attachment.cloudwatch-nat-logs-policy2](https://registry.terraform.io/providers/hashicorp/aws
+/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.ssm-nat-policy2](https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+/resources/iam_role_policy_attachment) | resource |
+| [aws_instance.nat_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
+| resource |
+| [aws_key_pair.rsa_nat](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/key_pair) |
+resource |
+| [aws_network_interface.natgw_private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/
+network_interface) | resource |
+| [aws_network_interface_attachment.nat_private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/
+resources/network_interface_attachment) | resource |
+| [aws_route.private_subs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route) |
+resource |
+| [aws_security_group.natgw_private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/
+security_group) | resource |
+| [aws_security_group.natgw_public](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/
+security_group) | resource |
+| [aws_ssm_parameter.nat_instance_ssh_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/
+resources/ssm_parameter) | resource |
+| [tls_private_key.pk_nat](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key)
+| resource |
+| [aws_ami.latest_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data
+source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Random name prefix for resources | `string` | n/a | yes |
-| <a name="input_private_route_table_ids"></a> [private\_route\_table\_ids](#input\_private\_route\_table\_ids) | List of private route table IDs | `list(string)` | n/a | yes |
-| <a name="input_private_subnet_ids"></a> [private\_subnet\_ids](#input\_private\_subnet\_ids) | List of private subnet IDs | `list(string)` | n/a | yes |
-| <a name="input_public_subnet_ids"></a> [public\_subnet\_ids](#input\_public\_subnet\_ids) | List of public subnet IDs | `list(string)` | n/a | yes |
-| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC | `string` | n/a | yes |
-| <a name="input_ami_id"></a> [ami\_id](#input\_ami\_id) | AMI ID for NAT instances. If null, uses latest Amazon Linux 2023. To find AMI: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-2023.*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region> | `string` | `null` | no |
-| <a name="input_create_ssh_keys"></a> [create\_ssh\_keys](#input\_create\_ssh\_keys) | Create ssh keys for the NAT instance/s | `bool` | `false` | no |
-| <a name="input_credits_mode"></a> [credits\_mode](#input\_credits\_mode) | Credits mode for NAT instances. Can be `standard` or `unlimited` | `string` | `"unlimited"` | no |
-| <a name="input_disk_configuration"></a> [disk\_configuration](#input\_disk\_configuration) | Disk configuration for NAT instances | <pre>object({<br/>    delete_on_termination = optional(bool),<br/>    encrypted             = optional(bool),<br/>    iops                  = optional(number),<br/>    kms_key_id            = optional(string),<br/>    tags                  = optional(map(string)),<br/>    throughput            = optional(number),<br/>    size                  = optional(number),<br/>    type                  = optional(string)<br/>  })</pre> | <pre>{<br/>  "delete_on_termination": true,<br/>  "encrypted": true,<br/>  "size": 30,<br/>  "type": "gp3"<br/>}</pre> | no |
-| <a name="input_enable_cloudwatch_logs"></a> [enable\_cloudwatch\_logs](#input\_enable\_cloudwatch\_logs) | Enable CloudWatch logging for NAT instances | `bool` | `false` | no |
-| <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | EC2 instance type for NAT instances | `string` | `"t4g.nano"` | no |
-| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention in days | `string` | `7` | no |
-| <a name="input_nat_instance_per_az"></a> [nat\_instance\_per\_az](#input\_nat\_instance\_per\_az) | Whether to create a NAT instance per AZ or a single NAT instance for all AZs | `bool` | `false` | no |
-| <a name="input_user_data_script"></a> [user\_data\_script](#input\_user\_data\_script) | Path to the custom user data script. By default use /ec2\_conf/userdata.tpl | `string` | `""` | no |
+| <a name="input_name_prefix"></a> [name\_prefix](#input\_name\_prefix) | Random name prefix for resources | string
+| n/a | yes |
+| <a name="input_private_route_table_ids"></a> [private\_route\_table\_ids](#input\_private\_route\_table\_ids) |
+List of private route table IDs | list(string) | n/a | yes |
+| <a name="input_private_subnet_ids"></a> [private\_subnet\_ids](#input\_private\_subnet\_ids) | List of private
+subnet IDs | list(string) | n/a | yes |
+| <a name="input_public_subnet_ids"></a> [public\_subnet\_ids](#input\_public\_subnet\_ids) | List of public subnet
+IDs | list(string) | n/a | yes |
+| <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of the VPC | string | n/a | yes |
+| <a name="input_ami_id"></a> [ami\_id](#input\_ami\_id) | AMI ID for NAT instances. If null, uses latest Amazon
+Linux 2023. To find AMI: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-2023.*-
+kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table
+--region <your-region> | string | null | no |
+| <a name="input_create_ssh_keys"></a> [create\_ssh\_keys](#input\_create\_ssh\_keys) | Create ssh keys for the NAT
+instance/s | bool | false | no |
+| <a name="input_credits_mode"></a> [credits\_mode](#input\_credits\_mode) | Credits mode for NAT instances. Can be
+standard or unlimited | string | "unlimited" | no |
+| <a name="input_disk_configuration"></a> [disk\_configuration](#input\_disk\_configuration) | Disk configuration
+for NAT instances | <pre>object({<br/>    delete_on_termination = optional(bool),<br/>    encrypted             =
+optional(bool),<br/>    iops                  = optional(number),<br/>    kms_key_id            = optional(string),<
+br/>    tags                  = optional(map(string)),<br/>    throughput            = optional(number),<br/>
+size                  = optional(number),<br/>    type                  = optional(string)<br/>  })</pre> | <pre>{<
+br/>  "delete_on_termination": true,<br/>  "encrypted": true,<br/>  "size": 30,<br/>  "type": "gp3"<br/>}</pre> | no
+|
+| <a name="input_enable_cloudwatch_logs"></a> [enable\_cloudwatch\_logs](#input\_enable\_cloudwatch\_logs) | Enable
+CloudWatch logging for NAT instances | bool | false | no |
+| <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | EC2 instance type for NAT instances
+| string | "t4g.nano" | no |
+| <a name="input_log_retention_days"></a> [log\_retention\_days](#input\_log\_retention\_days) | Log retention in
+days | string | 7 | no |
+| <a name="input_nat_instance_per_az"></a> [nat\_instance\_per\_az](#input\_nat\_instance\_per\_az) | Whether to
+create a NAT instance per AZ or a single NAT instance for all AZs | bool | false | no |
+| <a name="input_user_data_script"></a> [user\_data\_script](#input\_user\_data\_script) | Path to the custom user
+data script. By default use /ec2\_conf/userdata.tpl | string | "" | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
-| <a name="output_nat_instance_details"></a> [nat\_instance\_details](#output\_nat\_instance\_details) | Details of NAT instances including ID and Public IP |
-| <a name="output_nat_instance_ids"></a> [nat\_instance\_ids](#output\_nat\_instance\_ids) | IDs of the NAT EC2 instances |
-| <a name="output_nat_public_ips"></a> [nat\_public\_ips](#output\_nat\_public\_ips) | Public IPs of the NAT instances |
+| <a name="output_nat_instance_details"></a> [nat\_instance\_details](#output\_nat\_instance\_details) | Details of
+NAT instances including ID and Public IP |
+| <a name="output_nat_instance_ids"></a> [nat\_instance\_ids](#output\_nat\_instance\_ids) | IDs of the NAT EC2
+instances |
+| <a name="output_nat_public_ips"></a> [nat\_public\_ips](#output\_nat\_public\_ips) | Public IPs of the NAT
+instances |
 <!-- END_TF_DOCS -->
