@@ -3,12 +3,12 @@
 locals {
   az_count           = length(var.public_subnet_ids)
   nat_instance_count = var.nat_instance_per_az ? local.az_count : 1
-  
-  # Template variables for user data
-  userdata_template_vars = {
-    enable_cloudwatch_logs = var.enable_cloudwatch_logs
-    log_group_name        = var.enable_cloudwatch_logs ? aws_cloudwatch_log_group.natgw_logs[0].name : ""
+  ami_values = {
+    "arm" = "al2023-ami-2023.*-kernel-*-arm64"
+    "x86" = "al2023-ami-2023.*-kernel-*-x86_64"
   }
+  is_arm       = can(regex("^[a-z0-9]+g\\.", var.instance_type)) # Look for "g." suffix in instance type
+  architecture = local.is_arm ? "arm" : "x86"                    # If ARM, use "arm64", otherwise "x86_64"
 }
 
 # SSH Key Generation
@@ -27,7 +27,7 @@ resource "aws_key_pair" "rsa_nat" {
 resource "aws_ssm_parameter" "nat_instance_ssh_key" {
   count       = var.create_ssh_keys ? local.nat_instance_count : 0
   name        = "/nat-instances/${var.name_prefix}-natgw-${count.index + 1}-ssh-key"
-  description = "Chiave privata SSH per la ec2-nat ${count.index + 1}"
+  description = "SSH private key for ec2-nat ${count.index + 1}"
   type        = "SecureString"
   value       = tls_private_key.pk_nat[0].private_key_pem
 }
@@ -111,22 +111,6 @@ resource "aws_eip" "nat_eip" {
   }
 }
 
-
-locals {
-  ami_values = {
-    "arm" = "al2023-ami-2023.*-kernel-*-arm64"
-    "x86" = "al2023-ami-2023.*-kernel-*-x86_64"
-  }
-}
-
-
-
-# Determina l'architettura in base al tipo di istanza
-locals {
-  is_arm       = can(regex("^[a-z0-9]+g\\.", var.instance_type)) # Cerca il suffisso "g." nel tipo di istanza
-  architecture = local.is_arm ? "arm" : "x86"                    # Se è ARM, usa "arm64", altrimenti "x86_64"
-}
-
 # AMI Data Source - Finds latest Amazon Linux 2023 AMI
 # AWS CLI commands to find AMI manually:
 # For ARM64: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>
@@ -152,24 +136,17 @@ data "aws_ami" "latest_ami" {
   owners = ["amazon"]
 }
 
-# CloudWatch Log Group
-resource "aws_cloudwatch_log_group" "natgw_logs" {
-  count             = var.enable_cloudwatch_logs ? 1 : 0
-  name              = "/aws/ec2/natgw/logs"
-  retention_in_days = var.log_retention_days
-}
-
 # EC2 Instance - Native Terraform Resources
 resource "aws_instance" "nat_instance" {
   count                = local.nat_instance_count
   ami                  = var.ami_id != null ? var.ami_id : data.aws_ami.latest_ami.id
   instance_type        = var.instance_type
   key_name             = var.create_ssh_keys ? aws_key_pair.rsa_nat[0].key_name : null
-  iam_instance_profile = aws_iam_instance_profile.ec2-nat-ssm-cloudwatch-instance-profile.name
-  user_data_base64     = base64encode(
-    var.user_data_script != "" ? 
-    file(var.user_data_script) : 
-    templatefile("${path.module}/ec2_conf/userdata.tpl", local.userdata_template_vars)
+  iam_instance_profile = aws_iam_instance_profile.ec2_nat_ssm_cloudwatch_instance_profile.name
+  user_data_base64 = base64encode(
+    var.user_data_script != "" ?
+    file(var.user_data_script) :
+    file("${path.module}/ec2_conf/userdata.tpl")
   )
 
   # Launch in public subnet
@@ -212,4 +189,3 @@ resource "aws_network_interface_attachment" "nat_private" {
   network_interface_id = aws_network_interface.natgw_private[count.index].id
   device_index         = 1
 }
-

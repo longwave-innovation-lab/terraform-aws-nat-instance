@@ -1,14 +1,14 @@
 #######################################
-# VARIABILI PER VPC 
+# VARIABLES FOR VPC
 #######################################
 
-# se lo imposto a 0 uso le istanze nat
-# se lo imoposto a 1 uso il servizio NAT GARTEWAY con un solo nat gateway per VPC
-# se lo imposto a 2 uso il servizio NAT GARTEWAY con 1 nat gateway per ogni AZ 
+# if set to 0 use nat instances
+# if set to 1 use NAT GATEWAY service with a single nat gateway per VPC
+# if set to 2 use NAT GATEWAY service with 1 nat gateway per AZ
 
 variable "vpc_natgw" {
   default     = 0
-  description = "imposto a 0 uso le istanze nat, imoposto a 1 uso il servizio NAT GARTEWAY, imposto a 2 uso il servizio NAT GARTEWAY con 1 nat gateway per ogni AZ "
+  description = "Set to 0 to use nat instances, set to 1 to use NAT GATEWAY service, set to 2 to use NAT GATEWAY service with 1 nat gateway per AZ"
   type        = number
 }
 
@@ -18,20 +18,20 @@ variable "aws_region" {
 }
 
 variable "profile_name" {
-  description = "Nome del profilo di aws"
+  description = "AWS profile name"
   type        = string
 }
 
-# Variabile per il tipo di istanza
+# Variable for instance type
 variable "instance_type" {
   type        = string
-  description = "il tipo di ec2 da attivare come istanza nat"
+  description = "EC2 instance type to use as NAT instance"
   default     = "t4g.nano"
 }
 
 variable "ami_id" {
   type        = string
-  description = "id della ami, attenzione a selezionare AMI in base alla piattaforma ARM o x86"
+  description = "AMI ID, make sure to select AMI based on ARM or x86 platform"
   default     = "ami-0adb87b81434a4f85"
 }
 
@@ -39,7 +39,7 @@ variable "ami_id" {
 variable "vpc_natgw_distribution" {
   description = "Distribution of NAT Gateway instances across the NAT Gateway subnets. Valid values are: SINGLE, MULTI-AZ"
   type        = string
-  default     = "SINGLE"
+  default     = "MULTI-AZ"
   validation {
     condition     = contains(["SINGLE", "MULTI-AZ"], upper(var.vpc_natgw_distribution))
     error_message = "vpc_natgw_distribution must be one of: SINGLE or MULTI-AZ"

@@ -53,18 +53,6 @@ variable "user_data_script" {
   default     = ""
 }
 
-variable "log_retention_days" {
-  type        = string
-  default     = 7
-  description = "Log retention in days"
-}
-
-variable "enable_cloudwatch_logs" {
-  description = "Enable CloudWatch logging for NAT instances"
-  type        = bool
-  default     = false
-}
-
 variable "disk_configuration" {
   type = object({
     delete_on_termination = optional(bool),
@@ -89,4 +77,62 @@ variable "credits_mode" {
   type        = string
   default     = "unlimited"
   description = "Credits mode for NAT instances. Can be `standard` or `unlimited`"
+}
+
+# ============================================================================
+# Lambda Internet Connectivity Check Variables
+# ============================================================================
+
+variable "enable_internet_check" {
+  description = "Enable Lambda-based internet connectivity check for private subnets"
+  type        = bool
+  default     = true
+}
+
+variable "internet_check_alert_emails" {
+  description = "List of email addresses for internet connectivity check alerts. Leave empty to skip email subscriptions"
+  type        = list(string)
+  default     = ["innovation_rd@longwave.it"]
+}
+
+variable "internet_check_schedule_expression" {
+  description = "CloudWatch Event schedule expression for internet check (e.g., 'rate(5 minutes)')"
+  type        = string
+  default     = "rate(5 minutes)"
+}
+
+variable "internet_check_schedule_minutes" {
+  description = "Schedule interval in minutes for internet check (used only for description)"
+  type        = number
+  default     = 5
+}
+
+variable "internet_check_log_retention_days" {
+  description = "CloudWatch log retention in days for internet check Lambda functions"
+  type        = number
+  default     = 7
+}
+
+variable "internet_check_evaluation_periods" {
+  description = "Number of periods to evaluate for the internet check alarm"
+  type        = number
+  default     = 2
+}
+
+variable "internet_check_period" {
+  description = "Period in seconds for the internet check alarm metric"
+  type        = number
+  default     = 300
+}
+
+variable "internet_check_threshold" {
+  description = "Threshold for the internet check alarm (number of successful checks)"
+  type        = number
+  default     = 1
+}
+
+variable "internet_check_urls" {
+  description = "List of HTTPS URLs to check for internet connectivity"
+  type        = list(string)
+  default     = ["https://1.1.1.1", "https://dns.google/resolve?name=google.com"]
 }
