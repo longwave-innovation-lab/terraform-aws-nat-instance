@@ -1,15 +1,11 @@
-# CREO RANDOM SRING DA APPENDERE
+locals {
+  name_prefix = random_string.random_id.result
+}
+
+# CREATE RANDOM STRING TO APPEND
 resource "random_string" "random_id" {
-  length  = 6 # Lunghezza del prefisso casuale
+  length  = 6 # Random prefix length
   special = false
   upper   = false
   lower   = false
-}
-
-#variable "prefix" {
-#  default = "deploy-" # Prefisso personalizzabile
-#}
-
-locals {
-  name_prefix = random_string.random_id.result
 }

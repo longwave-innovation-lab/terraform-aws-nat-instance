@@ -1,6 +1,6 @@
 
-# Creazione di un ruolo IAM per l'istanza EC2
-resource "aws_iam_role" "ec2-nat-ssm-cloudwatch" {
+# Create IAM role for EC2 instance
+resource "aws_iam_role" "ec2_nat_ssm_cloudwatch" {
   name_prefix = "${var.name_prefix}-nat-logs-role-"
 
   assume_role_policy = jsonencode({
@@ -18,28 +18,28 @@ resource "aws_iam_role" "ec2-nat-ssm-cloudwatch" {
 }
 
 # IAM Instance Profile
-resource "aws_iam_instance_profile" "ec2-nat-ssm-cloudwatch-instance-profile" {
+resource "aws_iam_instance_profile" "ec2_nat_ssm_cloudwatch_instance_profile" {
   name_prefix = "${var.name_prefix}-ec2-nat-ssm-cloudwatch-"
-  role        = aws_iam_role.ec2-nat-ssm-cloudwatch.name
+  role        = aws_iam_role.ec2_nat_ssm_cloudwatch.name
 }
 
 # Attach cloudwatch Policy
-resource "aws_iam_role_policy_attachment" "cloudwatch-nat-logs-policy2" {
-  role       = aws_iam_role.ec2-nat-ssm-cloudwatch.name
+resource "aws_iam_role_policy_attachment" "cloudwatch_nat_logs_policy" {
+  role       = aws_iam_role.ec2_nat_ssm_cloudwatch.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 # Attach SSM Policy
-resource "aws_iam_role_policy_attachment" "ssm-nat-policy2" {
-  role       = aws_iam_role.ec2-nat-ssm-cloudwatch.name
+resource "aws_iam_role_policy_attachment" "ssm_nat_policy" {
+  role       = aws_iam_role.ec2_nat_ssm_cloudwatch.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 
 # add policy to describe in userdata
-resource "aws_iam_role_policy" "ec2-describe-network-policy" {
+resource "aws_iam_role_policy" "ec2_describe_network_policy" {
   name = "${var.name_prefix}-describe-network-policy"
-  role = aws_iam_role.ec2-nat-ssm-cloudwatch.id
+  role = aws_iam_role.ec2_nat_ssm_cloudwatch.id
 
   policy = jsonencode({
     Version = "2012-10-17"
