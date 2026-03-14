@@ -1,3 +1,15 @@
+## [1.1.0](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.5...v1.1.0) (2026-03-14)
+
+
+### Features
+
+* improved nft table script add lambdacheck ([7815d1c](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/7815d1c5e131067ebd77f55d181d0213ea234982))
+
+
+### Bug Fixes
+
+* translate readme.md to English ([b821d55](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/b821d55c3ff9162e1c0b8264e0b32142ce31bbe3))
+
 ## [1.0.5](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.4...v1.0.5) (2026-02-20)
 
 ## [1.0.4](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.3...v1.0.4) (2026-02-20)
@@ -30,6 +42,4 @@
 * format text and delete comment ([addd845](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/addd845279919432e490cfe81c48d41bdd4400e7))
 * select ami amazon linux 2023 standard ([a1c3bc1](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/a1c3bc19842a357c418c257d894adfc4c99911ed))
 * upgrade default root volume at 30GB ([256c01b](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/256c01b8fe8603d49eb298722697f2d7e4eaa725))
-
-## [1.0.1](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.0...v1.0.1) (2025-09-16)
 
