@@ -80,9 +80,14 @@ The selection is dynamically controlled via two variables in the example:
 - Optional Lambda-based internet connectivity monitoring with CloudWatch Alarms and SNS notifications
 - Configurable disk, CPU credits and user data script
 
-## Architettura
+- NAT instances with dual network interfaces:  
+  - `eth0`: Public interface in the public subnet  
+  - `eth1`: Private interface in the private subnet  
+- Source/destination check disabled on private interface  
+- Elastic IPs associated with public interfaces  
+- Amazon Linux 2023 OS  
 
-### Configurazione
+### Security Groups
 
 - NAT instances with dual network interfaces:
   - `eth0` (primary): Public interface in the public subnet — receives an Elastic IP
@@ -91,7 +96,9 @@ The selection is dynamically controlled via two variables in the example:
 - IMDSv2 enforced (`http_tokens = "required"`)
 - Burstable CPU credits mode configurable (`standard` or `unlimited`)
 
-### Gruppi di Sicurezza
+2. Private Interface (`eth1`):  
+   - Allows all inbound traffic from private subnets  
+   - Allows all outbound traffic  
 
 1. **Public Interface** (`eth0`):
    - Egress: allows all outbound traffic
@@ -101,7 +108,8 @@ The selection is dynamically controlled via two variables in the example:
    - Ingress: allows all traffic (from private subnets)
    - Egress: allows all outbound traffic
 
-### Configurazione IAM
+- Permissions for CloudWatch Agent  
+- Access to Systems Manager (SSM)  
 
 Creates an IAM role (`iam.tf`) with:
 
@@ -440,7 +448,7 @@ Writes the CloudWatch Agent configuration to `/opt/aws/amazon-cloudwatch-agent/e
 
 ---
 
-### File e Servizi Creati
+### Created Files and Services
 
 **Configuration Files:**
 
@@ -676,7 +684,7 @@ Alarm Details:
 - **Bidirectional Notifications**: You'll receive emails both when alarms trigger (ALARM) and when they resolve (OK)
 - **Evaluation Periods**: With default settings (`evaluation_periods = 2`), alarms trigger only after 2 consecutive failed checks (~10 minutes)
 
-## Note e Best Practices
+## Notes and Best Practices
 
 1. **High Availability**
    - For production environments, enable `nat_instance_per_az = true` or use the managed NAT Gateway service
@@ -711,15 +719,21 @@ Alarm Details:
 
 3. **Check if IP forwarding is enabled**
 
-   ```sh
-   sysctl net.ipv4.ip_forward
-   ```
+  ```sh
+  ip route show
+  ```
 
    If the value is `0`, reactivate it with:
 
-   ```sh
-   echo 1 > /proc/sys/net/ipv4/ip_forward
-   ```
+  ```sh
+  sysctl net.ipv4.ip_forward
+  ```
+
+   If the value is 0, reactivate it with:
+
+  ```sh
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+  ```
 
    > **WARNING**: verify that `/etc/sysctl.d/99-ip-forward.conf` contains only `net.ipv4.ip_forward=1`
 
@@ -749,7 +763,7 @@ Alarm Details:
    tcpdump -i <PRIVATE_INTERFACE> icmp
    ```
 
-   Per vedere se il traffico sta passando correttamente tra le interfacce:
+   To see if traffic is passing correctly between interfaces:
 
    ```sh
    tcpdump -i <PUBLIC_INTERFACE> icmp
@@ -797,7 +811,7 @@ Alarm Details:
 | Name | Version |
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5.7 |
-| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.0.0 |
+| <a name="requirement_aws"></a> aws #requirement\_aws | >= 6.0.0 |
 
 ## Providers
 

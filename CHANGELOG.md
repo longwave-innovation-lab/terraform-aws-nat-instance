@@ -1,3 +1,5 @@
+## [1.0.5](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.4...v1.0.5) (2026-02-20)
+
 ## [1.0.4](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.3...v1.0.4) (2026-02-20)
 
 
@@ -30,15 +32,4 @@
 * upgrade default root volume at 30GB ([256c01b](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/256c01b8fe8603d49eb298722697f2d7e4eaa725))
 
 ## [1.0.1](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v1.0.0...v1.0.1) (2025-09-16)
-
-## [1.0.0](https://github.com/Longwave-innovation/terraform-aws-nat-instance/compare/v0.3.0...v1.0.0) (2025-07-29)
-
-
-### ⚠ BREAKING CHANGES
-
-* support AWS >= 6.0.0 and terraform >= 1.5.7 closes #9
-
-### Features
-
-* support AWS >= 6.0.0 and terraform >= 1.5.7 closes [#9](https://github.com/Longwave-innovation/terraform-aws-nat-instance/issues/9) ([5bc3717](https://github.com/Longwave-innovation/terraform-aws-nat-instance/commit/5bc3717d08f809456f25ffe895184bfc794e3090))
 
