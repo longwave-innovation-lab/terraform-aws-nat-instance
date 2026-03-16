@@ -17,6 +17,13 @@ resource "aws_sns_topic" "lambda_alerts" {
   tags = {
     Name = "${var.name_prefix}-internet-check-alerts"
   }
+
+  lifecycle {
+    precondition {
+      condition     = length(var.internet_check_alert_emails) > 0
+      error_message = "You must set 'internet_check_alert_emails' with at least one address when 'enable_internet_check' is true."
+    }
+  }
 }
 
 resource "aws_sns_topic_subscription" "lambda_alerts_email" {

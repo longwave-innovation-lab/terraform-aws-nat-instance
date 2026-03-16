@@ -47,11 +47,11 @@ module "nat_gateway" {
   #ami_id                  = var.ami_id
 
   # Internet Connectivity Check (Lambda-based monitoring)
-  enable_internet_check = true
-  # internet_check_alert_emails        = ["your-email@example.com"]  # Optional: default is ["innovation_rd@longwave.it"]
-  internet_check_schedule_expression = "rate(5 minutes)"
-  internet_check_log_retention_days  = 7
-  internet_check_evaluation_periods  = 2
-  internet_check_period              = 300
-  internet_check_threshold           = 1
+  # enable_internet_check       = true
+  # internet_check_alert_emails = ["change_me@email.com"] # Required when enable_internet_check is true
+  # internet_check_schedule_expression = "rate(5 minutes)"
+  # internet_check_log_retention_days  = 7
+  # internet_check_evaluation_periods  = 2
+  # internet_check_period              = 300
+  # internet_check_threshold           = 1
 }

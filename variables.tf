@@ -86,13 +86,13 @@ variable "credits_mode" {
 variable "enable_internet_check" {
   description = "Enable Lambda-based internet connectivity check for private subnets"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "internet_check_alert_emails" {
-  description = "List of email addresses for internet connectivity check alerts. Leave empty to skip email subscriptions"
+  description = "List of email addresses for internet connectivity check alerts. Required when enable_internet_check is true."
   type        = list(string)
-  default     = ["innovation_rd@longwave.it"]
+  default     = []
 }
 
 variable "internet_check_schedule_expression" {

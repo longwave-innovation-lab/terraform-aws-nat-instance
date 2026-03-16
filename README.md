@@ -77,12 +77,12 @@ The selection is dynamically controlled via two variables in the example:
 - Optional Lambda-based internet connectivity monitoring with CloudWatch Alarms and SNS notifications
 - Configurable disk, CPU credits and user data script
 
-- NAT instances with dual network interfaces:  
-  - `eth0`: Public interface in the public subnet  
-  - `eth1`: Private interface in the private subnet  
-- Source/destination check disabled on private interface  
-- Elastic IPs associated with public interfaces  
-- Amazon Linux 2023 OS  
+- NAT instances with dual network interfaces:
+  - `eth0`: Public interface in the public subnet
+  - `eth1`: Private interface in the private subnet
+- Source/destination check disabled on private interface
+- Elastic IPs associated with public interfaces
+- Amazon Linux 2023 OS
 
 ### Security Groups
 
@@ -93,9 +93,9 @@ The selection is dynamically controlled via two variables in the example:
 - IMDSv2 enforced (`http_tokens = "required"`)
 - Burstable CPU credits mode configurable (`standard` or `unlimited`)
 
-2. Private Interface (`eth1`):  
-   - Allows all inbound traffic from private subnets  
-   - Allows all outbound traffic  
+2. Private Interface (`eth1`):
+   - Allows all inbound traffic from private subnets
+   - Allows all outbound traffic
 
 1. **Public Interface** (`eth0`):
    - Egress: allows all outbound traffic
@@ -105,8 +105,8 @@ The selection is dynamically controlled via two variables in the example:
    - Ingress: allows all traffic (from private subnets)
    - Egress: allows all outbound traffic
 
-- Permissions for CloudWatch Agent  
-- Access to Systems Manager (SSM)  
+- Permissions for CloudWatch Agent
+- Access to Systems Manager (SSM)
 
 Creates an IAM role (`iam.tf`) with:
 
@@ -130,13 +130,14 @@ module "nat_gateway" {
   nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
 
-  # Internet Connectivity Check (Lambda-based monitoring)
-  enable_internet_check                = true
-  internet_check_schedule_expression   = "rate(5 minutes)"
-  internet_check_log_retention_days    = 7
-  internet_check_evaluation_periods    = 2
-  internet_check_period                = 300
-  internet_check_threshold             = 1
+  # Internet Connectivity Check (Lambda-based monitoring) — disabled by default
+  # enable_internet_check               = true
+  # internet_check_alert_emails         = ["change_me@email.com"] # Required when enable_internet_check is true
+  # internet_check_schedule_expression  = "rate(5 minutes)"
+  # internet_check_log_retention_days   = 7
+  # internet_check_evaluation_periods   = 2
+  # internet_check_period               = 300
+  # internet_check_threshold            = 1
 }
 ```
 
@@ -500,13 +501,14 @@ The Python function:
 
 ### Configuration
 
-#### Enable Monitoring (Default: Enabled)
+#### Enable Monitoring (Default: Disabled)
 
 ```hcl
 module "nat_instance" {
   source = "path/to/module"
   # ... other configurations ...
-  enable_internet_check = true
+  enable_internet_check       = true
+  internet_check_alert_emails = ["alerts@example.com"] # Required when enable_internet_check is true
 }
 ```
 
@@ -543,8 +545,8 @@ module "nat_instance" {
 
 | Variable | Description | Type | Default | Required |
 |---|---|---|---|:---:|
-| `enable_internet_check` | Enable Lambda-based internet connectivity check | `bool` | `true` | no |
-| `internet_check_alert_emails` | List of email addresses for alerts | `list(string)` | `["innovation_rd@longwave.it"]` | no |
+| `enable_internet_check` | Enable Lambda-based internet connectivity check | `bool` | `false` | no |
+| `internet_check_alert_emails` | List of email addresses for alerts. Required when `enable_internet_check` is `true` | `list(string)` | `[]` | yes (if enabled) |
 | `internet_check_schedule_expression` | CloudWatch Event schedule expression | `string` | `"rate(5 minutes)"` | no |
 | `internet_check_schedule_minutes` | Schedule interval in minutes (for description only) | `number` | `5` | no |
 | `internet_check_log_retention_days` | CloudWatch log retention in days | `number` | `7` | no |
@@ -868,9 +870,9 @@ No modules.
 | <a name="input_create_ssh_keys"></a> [create\_ssh\_keys](#input\_create\_ssh\_keys) | Create ssh keys for the NAT instance/s | `bool` | `false` | no |
 | <a name="input_credits_mode"></a> [credits\_mode](#input\_credits\_mode) | Credits mode for NAT instances. Can be `standard` or `unlimited` | `string` | `"unlimited"` | no |
 | <a name="input_disk_configuration"></a> [disk\_configuration](#input\_disk\_configuration) | Disk configuration for NAT instances | <pre>object({<br/>    delete_on_termination = optional(bool),<br/>    encrypted             = optional(bool),<br/>    iops                  = optional(number),<br/>    kms_key_id            = optional(string),<br/>    tags                  = optional(map(string)),<br/>    throughput            = optional(number),<br/>    size                  = optional(number),<br/>    type                  = optional(string)<br/>  })</pre> | <pre>{<br/>  "delete_on_termination": true,<br/>  "encrypted": true,<br/>  "size": 30,<br/>  "type": "gp3"<br/>}</pre> | no |
-| <a name="input_enable_internet_check"></a> [enable\_internet\_check](#input\_enable\_internet\_check) | Enable Lambda-based internet connectivity check for private subnets | `bool` | `true` | no |
+| <a name="input_enable_internet_check"></a> [enable\_internet\_check](#input\_enable\_internet\_check) | Enable Lambda-based internet connectivity check for private subnets | `bool` | `false` | no |
 | <a name="input_instance_type"></a> [instance\_type](#input\_instance\_type) | EC2 instance type for NAT instances | `string` | `"t4g.nano"` | no |
-| <a name="input_internet_check_alert_emails"></a> [internet\_check\_alert\_emails](#input\_internet\_check\_alert\_emails) | List of email addresses for internet connectivity check alerts. Leave empty to skip email subscriptions | `list(string)` | <pre>[<br/>  "innovation_rd@longwave.it"<br/>]</pre> | no |
+| <a name="input_internet_check_alert_emails"></a> [internet\_check\_alert\_emails](#input\_internet\_check\_alert\_emails) | List of email addresses for internet connectivity check alerts. Required when enable\_internet\_check is true. | `list(string)` | `[]` | no |
 | <a name="input_internet_check_evaluation_periods"></a> [internet\_check\_evaluation\_periods](#input\_internet\_check\_evaluation\_periods) | Number of periods to evaluate for the internet check alarm | `number` | `2` | no |
 | <a name="input_internet_check_log_retention_days"></a> [internet\_check\_log\_retention\_days](#input\_internet\_check\_log\_retention\_days) | CloudWatch log retention in days for internet check Lambda functions | `number` | `7` | no |
 | <a name="input_internet_check_period"></a> [internet\_check\_period](#input\_internet\_check\_period) | Period in seconds for the internet check alarm metric | `number` | `300` | no |
