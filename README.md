@@ -28,7 +28,7 @@
   - [How It Works](#how-it-works)
   - [Lambda Function (`lambda_function.py`)](#lambda-function-lambda_functionpy)
   - [Configuration](#configuration)
-    - [Enable Monitoring (Default: Enabled)](#enable-monitoring-default-enabled)
+    - [Enable Monitoring (Default: Disabled)](#enable-monitoring-default-disabled)
     - [Disable Monitoring](#disable-monitoring)
     - [Full Configuration Example](#full-configuration-example)
   - [Variables](#variables)
