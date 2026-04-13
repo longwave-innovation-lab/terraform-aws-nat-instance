@@ -8,13 +8,13 @@ module "vpc" {
   version               = "6.6.0"                                 # Check latest available version
   name                  = "VPC-${random_string.random_id.result}" # must not start with a number!!!!
   cidr                  = "192.168.0.0/19"
-  azs                   = ["${var.aws_region}a", "${var.aws_region}b", "${var.aws_region}c"] # Replace with your availability zones
-  private_subnets       = ["192.168.1.0/24", "192.168.2.0/24", "192.168.3.0/24"]
-  private_subnet_names  = ["${random_string.random_id.result} Private Subnet 1a", "${random_string.random_id.result} Private Subnet 2b", "${random_string.random_id.result} Private Subnet 3c"]
-  public_subnets        = ["192.168.10.0/24", "192.168.11.0/24", "192.168.12.0/24"]
-  public_subnet_names   = ["${random_string.random_id.result} Public Subnet 1a", "${random_string.random_id.result} Public Subnet 2b", "${random_string.random_id.result} Public Subnet 3c"]
-  database_subnets      = ["192.168.20.0/24", "192.168.21.0/24", "192.168.31.0/24"]
-  database_subnet_names = ["${random_string.random_id.result} Database Subnet 1a", "${random_string.random_id.result} Database Subnet 2b", "${random_string.random_id.result} Database Subnet 3c"]
+  azs                   = ["${var.aws_region}a", "${var.aws_region}b"] # Replace with your availability zones
+  private_subnets       = ["192.168.1.0/24", "192.168.2.0/24"]
+  private_subnet_names  = ["${random_string.random_id.result} Private Subnet 1a", "${random_string.random_id.result} Private Subnet 2b"]
+  public_subnets        = ["192.168.10.0/24", "192.168.11.0/24"]
+  public_subnet_names   = ["${random_string.random_id.result} Public Subnet 1a", "${random_string.random_id.result} Public Subnet 2b"]
+  database_subnets      = ["192.168.20.0/24", "192.168.21.0/24"]
+  database_subnet_names = ["${random_string.random_id.result} Database Subnet 1a", "${random_string.random_id.result} Database Subnet 2b"]
 
   create_database_subnet_group = true
   enable_dns_support           = true

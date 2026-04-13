@@ -29,11 +29,11 @@ variable "instance_type" {
   default     = "t4g.nano"
 }
 
-variable "ami_id" {
-  type        = string
-  description = "AMI ID, make sure to select AMI based on ARM or x86 platform"
-  default     = "ami-0adb87b81434a4f85"
-}
+# variable "ami_id" {
+#   type        = string
+#   description = "AMI ID, make sure to select AMI based on ARM or x86 platform"
+#   default     = "ami-0adb87b81434a4f85"
+# }
 
 
 variable "vpc_natgw_distribution" {
