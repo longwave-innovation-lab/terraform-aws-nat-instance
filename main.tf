@@ -100,15 +100,32 @@ resource "aws_route" "private_subs" {
 }
 
 
-# Elastic IP for instance primary network interface
+# Elastic IP - solo allocazione, senza associazione inline.
+# L'associazione inline causerebbe problemi di lifecycle durante il cambio SINGLE → MULTI-AZ:
+# Terraform proverebbe ad associare l'EIP a istanze già terminate.
+# La risorsa aws_eip_association separata garantisce l'ordine corretto:
+# disassocia EIP → distrugge istanza → crea nuova istanza → riassocia EIP.
 resource "aws_eip" "nat_eip" {
-  count             = local.nat_instance_count
-  network_interface = aws_instance.nat_instance[count.index].primary_network_interface_id
-  domain            = "vpc"
+  count  = local.nat_instance_count
+  domain = "vpc"
 
   tags = {
     Name = "${var.name_prefix}-natgw-${count.index + 1}-az-${element(["a", "b", "c"], count.index)}"
   }
+}
+
+# Associazione EIP separata per gestire correttamente il lifecycle.
+# Si usa network_interface_id (ENI primaria/pubblica, eth0) invece di instance_id:
+# con due ENI attaccate, AWS richiede di specificare l'interfaccia esplicitamente.
+resource "aws_eip_association" "nat_eip" {
+  count                = local.nat_instance_count
+  allocation_id        = aws_eip.nat_eip[count.index].id
+  network_interface_id = aws_instance.nat_instance[count.index].primary_network_interface_id
+
+  depends_on = [
+    aws_instance.nat_instance,
+    aws_network_interface_attachment.nat_private,
+  ]
 }
 
 # AMI Data Source - Finds latest Amazon Linux 2023 AMI
@@ -117,10 +134,16 @@ resource "aws_eip" "nat_eip" {
 # For x86_64: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-x86_64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>
 data "aws_ami" "latest_ami" {
   most_recent = true
+  owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = [local.is_arm ? "al2023-ami-2023.*-kernel-*-arm64" : "al2023-ami-2023.*-kernel-*-x86_64"]
+    values = ["al2023-ami-*-kernel-*-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = [local.is_arm ? "arm64" : "x86_64"]
   }
 
   filter {
@@ -132,10 +155,7 @@ data "aws_ami" "latest_ami" {
     name   = "state"
     values = ["available"]
   }
-
-  owners = ["amazon"]
 }
-
 # EC2 Instance - Native Terraform Resources
 resource "aws_instance" "nat_instance" {
   count                = local.nat_instance_count
