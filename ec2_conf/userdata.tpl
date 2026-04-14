@@ -179,21 +179,39 @@ if [ -z "$PRIVATE_GATEWAY" ]; then
 fi
 ip route add "$VPC_CIDR" via "$PRIVATE_GATEWAY" dev "$PRIVATE_INTERFACE" 2>/dev/null || true
 log_status "[Step 10] SUCCESS: route $VPC_CIDR via $PRIVATE_GATEWAY on $PRIVATE_INTERFACE"
-# Step 11 — Persistent VPC CIDR Route via NM dispatcher script
-# Il dispatcher viene eseguito da NM dopo che DHCP completa sull'interfaccia:
-# elimina la race condition del systemd service con network-online.target.
-# Le variabili PRIVATE_INTERFACE, VPC_CIDR, PRIVATE_GATEWAY sono espanse ora
-# (write time) e restano hardcoded nello script del dispatcher.
-log_status "[Step 11] Creating NM dispatcher for persistent VPC CIDR route"
-mkdir -p /etc/NetworkManager/dispatcher.d
-cat > /etc/NetworkManager/dispatcher.d/10-vpc-route <<EOF
-#!/bin/bash
-if [ "\$1" = "$PRIVATE_INTERFACE" ] && [ "\$2" = "up" ]; then
-    ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE 2>/dev/null || true
-fi
+# Step 11 — Persistent VPC CIDR Route via systemd service con retry loop.
+# VPC_CIDR e PRIVATE_INTERFACE sono baked-in al write time.
+# PRIVATE_GATEWAY viene rilevato a runtime con retry (max 120s, 24 tentativi x 5s):
+# risolve la race condition con DHCP senza dipendere da network-online.target.
+# NetworkManager-dispatcher non è disponibile su AL2023 minimal.
+log_status "[Step 11] Creating vpc-route systemd service"
+cat > /etc/systemd/system/vpc-route.service <<EOF
+[Unit]
+Description=Add VPC CIDR route on private interface $PRIVATE_INTERFACE
+After=network.target
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c '\
+  for i in \$(seq 1 24); do \
+    GW=\$(ip route show dev $PRIVATE_INTERFACE | grep -E "^default|^0\\.0\\.0\\.0" | awk "{print \\\$3}" | head -1); \
+    if [ -n "\$GW" ]; then \
+      ip route add $VPC_CIDR via \$GW dev $PRIVATE_INTERFACE 2>/dev/null || true; \
+      echo "vpc-route: added $VPC_CIDR via \$GW dev $PRIVATE_INTERFACE"; \
+      exit 0; \
+    fi; \
+    echo "vpc-route: waiting for DHCP on $PRIVATE_INTERFACE attempt \$i/24"; \
+    sleep 5; \
+  done; \
+  echo "vpc-route: ERROR PRIVATE_GATEWAY not found after 120s"; \
+  exit 1'
+[Install]
+WantedBy=multi-user.target
 EOF
-chmod +x /etc/NetworkManager/dispatcher.d/10-vpc-route
-log_status "[Step 11] SUCCESS: NM dispatcher created (route $VPC_CIDR via $PRIVATE_GATEWAY)"
+systemctl daemon-reload
+systemctl enable vpc-route.service
+systemctl start vpc-route.service
+log_status "[Step 11] SUCCESS: vpc-route service enabled (route $VPC_CIDR via $PRIVATE_INTERFACE)"
 # Step 12 — nftables NAT Configuration
 log_status "[Step 12] Configuring nftables NAT rules"
 mkdir -p /etc/nftables /etc/sysconfig
