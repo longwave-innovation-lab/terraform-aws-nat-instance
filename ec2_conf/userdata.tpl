@@ -158,34 +158,42 @@ if ! ip addr show "$PRIVATE_INTERFACE" | grep -q "inet "; then
     log_status "[Step 9] ERROR: $PRIVATE_INTERFACE has no IP after 60s"
     exit 1
 fi
-# Step 10 — AWS Metadata Retrieval and VPC Routing
-log_status "[Step 10] Getting metadata for VPC..."
-TOKEN=$(curl --request PUT "http://169.254.169.254/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
-REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region --header "X-aws-ec2-metadata-token: $TOKEN")
-VPC_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
-  http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
-  http://169.254.169.254/latest/meta-data/mac)/vpc-id)
-log_status "[Step 10] VPC_ID=$VPC_ID REGION=$REGION"
-VPC_CIDR=$(aws ec2 describe-vpcs --region $REGION --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
-PRIVATE_GATEWAY=$(ip route show dev $PRIVATE_INTERFACE | grep -E "^default|^0.0.0.0" | awk '{print $3}' | head -1)
-if [ -n "$PRIVATE_GATEWAY" ]; then
-    ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE 2>/dev/null || true
-fi
-# Step 11 — Persistent VPC CIDR Route via NetworkManager
-# NM applica le route del profilo DOPO che DHCP ha completato sull'interfaccia,
-# eliminando la race condition del systemd service con network-online.target.
-log_status "[Step 11] Adding VPC CIDR route to NetworkManager profile for $PRIVATE_INTERFACE"
-NM_CONN=$(nmcli -g GENERAL.CONNECTION device show "$PRIVATE_INTERFACE" 2>/dev/null)
-if [ -z "$NM_CONN" ]; then
-    log_status "[Step 11] ERROR: no NetworkManager connection found for $PRIVATE_INTERFACE"
+# Step 10 — VPC CIDR retrieval via IMDSv2 and immediate route setup
+# Usa IMDSv2 invece di aws ec2 describe-vpcs: nessun permesso IAM richiesto,
+# nessuna dipendenza da routing funzionante, sempre disponibile al boot.
+log_status "[Step 10] Getting VPC CIDR from IMDSv2..."
+TOKEN=$(curl -s --request PUT "http://169.254.169.254/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
+MAC_PUBLIC=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  "http://169.254.169.254/latest/meta-data/network/interfaces/macs/" | tr '\n' ' ' | awk '{print $1}' | tr -d '/')
+VPC_CIDR=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+  "http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC_PUBLIC}/vpc-ipv4-cidr-blocks" | head -1)
+PRIVATE_GATEWAY=$(ip route show dev "$PRIVATE_INTERFACE" | grep -E "^default|^0.0.0.0" | awk '{print $3}' | head -1)
+log_status "[Step 10] VPC_CIDR=$VPC_CIDR PRIVATE_GATEWAY=$PRIVATE_GATEWAY"
+if [ -z "$VPC_CIDR" ]; then
+    log_status "[Step 10] ERROR: could not retrieve VPC_CIDR from IMDSv2"
     exit 1
 fi
 if [ -z "$PRIVATE_GATEWAY" ]; then
-    log_status "[Step 11] ERROR: PRIVATE_GATEWAY is empty, cannot add route"
+    log_status "[Step 10] ERROR: PRIVATE_GATEWAY is empty on $PRIVATE_INTERFACE"
     exit 1
 fi
-nmcli connection modify "$NM_CONN" +ipv4.routes "$VPC_CIDR $PRIVATE_GATEWAY"
-log_status "[Step 11] SUCCESS: route $VPC_CIDR via $PRIVATE_GATEWAY added to NM profile '$NM_CONN'"
+ip route add "$VPC_CIDR" via "$PRIVATE_GATEWAY" dev "$PRIVATE_INTERFACE" 2>/dev/null || true
+log_status "[Step 10] SUCCESS: route $VPC_CIDR via $PRIVATE_GATEWAY on $PRIVATE_INTERFACE"
+# Step 11 — Persistent VPC CIDR Route via NM dispatcher script
+# Il dispatcher viene eseguito da NM dopo che DHCP completa sull'interfaccia:
+# elimina la race condition del systemd service con network-online.target.
+# Le variabili PRIVATE_INTERFACE, VPC_CIDR, PRIVATE_GATEWAY sono espanse ora
+# (write time) e restano hardcoded nello script del dispatcher.
+log_status "[Step 11] Creating NM dispatcher for persistent VPC CIDR route"
+mkdir -p /etc/NetworkManager/dispatcher.d
+cat > /etc/NetworkManager/dispatcher.d/10-vpc-route <<EOF
+#!/bin/bash
+if [ "\$1" = "$PRIVATE_INTERFACE" ] && [ "\$2" = "up" ]; then
+    ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE 2>/dev/null || true
+fi
+EOF
+chmod +x /etc/NetworkManager/dispatcher.d/10-vpc-route
+log_status "[Step 11] SUCCESS: NM dispatcher created (route $VPC_CIDR via $PRIVATE_GATEWAY)"
 # Step 12 — nftables NAT Configuration
 log_status "[Step 12] Configuring nftables NAT rules"
 mkdir -p /etc/nftables /etc/sysconfig
