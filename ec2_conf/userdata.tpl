@@ -194,6 +194,23 @@ for IFACE in "$PUBLIC_INTERFACE" "$PRIVATE_INTERFACE"; do
     fi
 done
 log_status "[Step 9] SUCCESS: Interface detection completed"
+# Wait for DHCP to complete on the private interface (eth1).
+# The interface can appear in /sys/class/net subito dopo il hot-attach
+# ma impiegare qualche secondo in più per ottenere IP e route via DHCP.
+log_status "[Step 9] Waiting for DHCP on $PRIVATE_INTERFACE..."
+for i in $(seq 1 12); do
+    if ip addr show "$PRIVATE_INTERFACE" | grep -q "inet "; then
+        PRIVATE_IP=$(ip addr show "$PRIVATE_INTERFACE" | grep "inet " | awk '{print $2}')
+        log_status "[Step 9] SUCCESS: $PRIVATE_INTERFACE has IP $PRIVATE_IP"
+        break
+    fi
+    log_status "[Step 9] Waiting for DHCP on $PRIVATE_INTERFACE... attempt $i/12"
+    sleep 5
+done
+if ! ip addr show "$PRIVATE_INTERFACE" | grep -q "inet "; then
+    log_status "[Step 9] ERROR: $PRIVATE_INTERFACE has no IP after 60s - DHCP failed or interface not ready"
+    exit 1
+fi
 # Step 10 — AWS Metadata Retrieval and VPC Routing
 log_status "[Step 10] Getting metadata for VPC..."
 TOKEN=$(curl --request PUT "http://169.254.169.254/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
