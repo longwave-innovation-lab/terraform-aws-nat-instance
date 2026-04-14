@@ -1,5 +1,4 @@
 #!/bin/bash
-# NAT Instance Userdata - Configure EC2 as NAT Gateway with nftables
 # Step 1 — Logging Setup
 exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 log_status() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"; }
@@ -8,157 +7,111 @@ log_status "Starting userdata script execution"
 log_status "[Step 2] Testing internet connectivity..."
 for attempt in 1 2; do
     INTERNET_OK=false
-    log_status "[Step 2] Testing connectivity to 8.8.8.8"
-    PING_COUNT=$(ping -c 10 8.8.8.8 | grep "received" | awk '{print $4}')
-    if [ "$PING_COUNT" -ge 3 ]; then
-        log_status "[Step 2] SUCCESS: 8.8.8.8 responded $PING_COUNT/3 times"
-        INTERNET_OK=true
-    else
-        log_status "[Step 2] FAILED: 8.8.8.8 responded only $PING_COUNT/3 times, trying 1.1.1.1"
-        log_status "[Step 2] Testing connectivity to 1.1.1.1"
-        PING_COUNT=$(ping -c 10 1.1.1.1 | grep "received" | awk '{print $4}')
+    for host in 8.8.8.8 1.1.1.1; do
+        PING_COUNT=$(ping -c 10 $host | grep "received" | awk '{print $4}')
         if [ "$PING_COUNT" -ge 3 ]; then
-            log_status "[Step 2] SUCCESS: 1.1.1.1 responded $PING_COUNT/3 times"
+            log_status "[Step 2] SUCCESS: $host responded $PING_COUNT/10"
             INTERNET_OK=true
-        else
-            log_status "[Step 2] FAILED: 1.1.1.1 responded only $PING_COUNT/3 times"
+            break
         fi
-    fi
-    if [ "$INTERNET_OK" = true ]; then
-        break
-    elif [ $attempt -eq 1 ]; then
-        log_status "[Step 2] First attempt failed, waiting 60 seconds before retry..."
+        log_status "[Step 2] FAILED: $host responded only $PING_COUNT/10"
+    done
+    if [ "$INTERNET_OK" = true ]; then break; fi
+    if [ $attempt -eq 1 ]; then
+        log_status "[Step 2] Waiting 60s before retry..."
         sleep 60
     fi
 done
 if [ "$INTERNET_OK" = false ]; then
-    log_status "[Step 2] ERROR: VM cannot reach internet after 2 attempts - both 8.8.8.8 and 1.1.1.1 failed"
+    log_status "[Step 2] ERROR: no internet after 2 attempts"
     exit 1
 fi
 # Step 3 — DNS Resolution Test
 log_status "[Step 3] Testing DNS connectivity..."
 for attempt in 1 2; do
     DNS_OK=false
-    log_status "[Step 3] Testing DNS resolution for google.com"
-    if ping -c 2 google.com > /dev/null 2>&1; then
-        log_status "[Step 3] SUCCESS: google.com DNS resolution and connectivity working"
-        DNS_OK=true
-    else
-        log_status "[Step 3] FAILED: google.com DNS resolution failed, trying cloudflare.com"
-        log_status "[Step 3] Testing DNS resolution for cloudflare.com"
-        if ping -c 2 cloudflare.com > /dev/null 2>&1; then
-            log_status "[Step 3] SUCCESS: cloudflare.com DNS resolution and connectivity working"
+    for host in google.com cloudflare.com; do
+        if ping -c 2 $host > /dev/null 2>&1; then
+            log_status "[Step 3] SUCCESS: $host resolved"
             DNS_OK=true
-        else
-            log_status "[Step 3] FAILED: cloudflare.com DNS resolution failed"
+            break
         fi
-    fi
-    if [ "$DNS_OK" = true ]; then
-        break
-    elif [ $attempt -eq 1 ]; then
-        log_status "[Step 3] First DNS attempt failed, waiting 60 seconds before retry..."
+        log_status "[Step 3] FAILED: $host DNS resolution failed"
+    done
+    if [ "$DNS_OK" = true ]; then break; fi
+    if [ $attempt -eq 1 ]; then
+        log_status "[Step 3] Waiting 60s before retry..."
         sleep 60
     fi
 done
 if [ "$DNS_OK" = false ]; then
-    log_status "[Step 3] ERROR: VM cannot resolve DNS after 2 attempts - both google.com and cloudflare.com failed"
+    log_status "[Step 3] ERROR: DNS failed after 2 attempts"
     exit 1
 fi
-log_status "All connectivity tests passed - proceeding with installation"
+log_status "Connectivity tests passed - proceeding"
 # Step 4 — System Update
 log_status "[Step 4] Starting system update..."
 for attempt in 1 2; do
-    log_status "[Step 4] System update attempt $attempt/2"
     if dnf update -y; then
-        log_status "[Step 4] SUCCESS: System update completed successfully"
+        log_status "[Step 4] SUCCESS: system update completed"
         break
-    else
-        log_status "[Step 4] FAILED: System update failed on attempt $attempt"
-        if [ $attempt -eq 1 ]; then
-            log_status "[Step 4] Waiting 30 seconds before retry..."
-            sleep 30
-        else
-            log_status "[Step 4] ERROR: System update failed after 2 attempts"
-            exit 1
-        fi
     fi
+    log_status "[Step 4] FAILED: system update attempt $attempt"
+    if [ $attempt -eq 1 ]; then sleep 30; else exit 1; fi
 done
 # Step 5 — Core Packages Installation
-log_status "[Step 5] Installing core packages..."
 PACKAGES="traceroute tcpdump amazon-cloudwatch-agent logrotate rsyslog nftables"
+log_status "[Step 5] Installing: $PACKAGES"
 for attempt in 1 2; do
-    log_status "[Step 5] Core packages installation attempt $attempt/2"
     if dnf install -y $PACKAGES; then
-        log_status "[Step 5] SUCCESS: Core packages installed successfully: $PACKAGES"
+        log_status "[Step 5] SUCCESS: packages installed"
         break
-    else
-        log_status "[Step 5] FAILED: Core packages installation failed on attempt $attempt"
-        log_status "[Step 5] Failed packages: $PACKAGES"
-        if [ $attempt -eq 1 ]; then
-            log_status "[Step 5] Waiting 30 seconds before retry..."
-            sleep 30
-        else
-            log_status "[Step 5] ERROR: Core packages installation failed after 2 attempts"
-            exit 1
-        fi
     fi
+    log_status "[Step 5] FAILED: packages installation attempt $attempt"
+    if [ $attempt -eq 1 ]; then sleep 30; else exit 1; fi
 done
 # Step 6 — SSM Agent Installation and Activation
 log_status "[Step 6] Installing SSM agent..."
 for attempt in 1 2; do
-    log_status "[Step 6] SSM agent installation attempt $attempt/2"
     if dnf install -y amazon-ssm-agent; then
-        log_status "[Step 6] SUCCESS: SSM agent installed successfully"
+        log_status "[Step 6] SUCCESS: SSM agent installed"
         break
-    else
-        log_status "[Step 6] FAILED: SSM agent installation failed on attempt $attempt"
-        log_status "[Step 6] Failed package: amazon-ssm-agent"
-        if [ $attempt -eq 1 ]; then
-            log_status "[Step 6] Waiting 30 seconds before retry..."
-            sleep 30
-        else
-            log_status "[Step 6] ERROR: SSM agent installation failed after 2 attempts"
-            exit 1
-        fi
     fi
+    log_status "[Step 6] FAILED: SSM agent installation attempt $attempt"
+    if [ $attempt -eq 1 ]; then sleep 30; else exit 1; fi
 done
-log_status "[Step 6] Configuring SSM agent service..."
 if systemctl enable amazon-ssm-agent && systemctl start amazon-ssm-agent; then
-    log_status "[Step 6] SUCCESS: SSM agent service enabled and started"
+    log_status "[Step 6] SUCCESS: SSM agent enabled and started"
 else
-    log_status "[Step 6] ERROR: Failed to configure SSM agent service"
+    log_status "[Step 6] ERROR: SSM agent service failed"
     exit 1
 fi
-log_status "All package installations completed successfully"
 # Step 7 — nftables Verification
-log_status "[Step 7] Verifying nftables installation"
 if ! command -v nft &> /dev/null; then
-    log_status "[Step 7] ERROR: nft command not found after installation"
+    log_status "[Step 7] ERROR: nft command not found"
     exit 1
 fi
-log_status "[Step 7] SUCCESS: nft command is available"
+log_status "[Step 7] SUCCESS: nft available"
 # Step 8 — IP Forwarding Configuration
 log_status "[Step 8] Enable IP Forwarding"
 echo "net.ipv4.ip_forward=1" | tee /etc/sysctl.d/99-ip-forward.conf
 chmod 644 /etc/sysctl.d/99-ip-forward.conf
 sysctl --system
 # Step 9 — Network Interface Detection
-log_status "[Step 9] Detecting network interfaces by role..."
-# Wait for both interfaces to be up (max 60s)
+log_status "[Step 9] Detecting network interfaces..."
 for i in $(seq 1 12); do
     IFACE_COUNT=$(ls /sys/class/net | grep -v "lo\|docker" | wc -l)
     if [ "$IFACE_COUNT" -ge 2 ]; then
-        log_status "[Step 9] SUCCESS: Found $IFACE_COUNT interfaces"
+        log_status "[Step 9] Found $IFACE_COUNT interfaces"
         break
     fi
-    log_status "[Step 9] Waiting for interfaces... attempt $i/12 (found $IFACE_COUNT)"
+    log_status "[Step 9] Waiting for interfaces... $i/12 (found $IFACE_COUNT)"
     sleep 5
 done
 if [ "$IFACE_COUNT" -lt 2 ]; then
-    log_status "[Step 9] ERROR: Less than 2 interfaces found after 60s"
+    log_status "[Step 9] ERROR: less than 2 interfaces after 60s"
     exit 1
 fi
-# The public interface is the one with the default route at lowest metric
 PUBLIC_INTERFACE=$(ip route show default \
     | awk '/^default/{
         for(i=1;i<=NF;i++) {
@@ -170,33 +123,27 @@ PUBLIC_INTERFACE=$(ip route show default \
     | sort -k1 -n \
     | awk '{print $2}' \
     | head -1)
-# The private interface is the other one (not loopback, not docker, not public)
 PRIVATE_INTERFACE=$(ls /sys/class/net \
     | grep -v "lo\|docker" \
     | grep -v "^${PUBLIC_INTERFACE}$" \
     | head -1)
-# Validation
 if [ -z "$PUBLIC_INTERFACE" ]; then
-    log_status "[Step 9] ERROR: Could not detect PUBLIC_INTERFACE"
+    log_status "[Step 9] ERROR: could not detect PUBLIC_INTERFACE"
     exit 1
 fi
 if [ -z "$PRIVATE_INTERFACE" ]; then
-    log_status "[Step 9] ERROR: Could not detect PRIVATE_INTERFACE"
+    log_status "[Step 9] ERROR: could not detect PRIVATE_INTERFACE"
     exit 1
 fi
-log_status "[Step 9] PUBLIC_INTERFACE  = $PUBLIC_INTERFACE"
-log_status "[Step 9] PRIVATE_INTERFACE = $PRIVATE_INTERFACE"
-# Verify that both interfaces actually exist
 for IFACE in "$PUBLIC_INTERFACE" "$PRIVATE_INTERFACE"; do
     if [ ! -d "/sys/class/net/$IFACE" ]; then
-        log_status "[Step 9] ERROR: Interface $IFACE does not exist"
+        log_status "[Step 9] ERROR: interface $IFACE does not exist"
         exit 1
     fi
 done
-log_status "[Step 9] SUCCESS: Interface detection completed"
-# Wait for DHCP to complete on the private interface (eth1).
-# The interface can appear in /sys/class/net subito dopo il hot-attach
-# ma impiegare qualche secondo in più per ottenere IP e route via DHCP.
+log_status "[Step 9] PUBLIC_INTERFACE=$PUBLIC_INTERFACE PRIVATE_INTERFACE=$PRIVATE_INTERFACE"
+# Wait for DHCP on private interface: the interface appears in /sys/class/net
+# right after hot-attach but DHCP may not have completed yet.
 log_status "[Step 9] Waiting for DHCP on $PRIVATE_INTERFACE..."
 for i in $(seq 1 12); do
     if ip addr show "$PRIVATE_INTERFACE" | grep -q "inet "; then
@@ -204,11 +151,11 @@ for i in $(seq 1 12); do
         log_status "[Step 9] SUCCESS: $PRIVATE_INTERFACE has IP $PRIVATE_IP"
         break
     fi
-    log_status "[Step 9] Waiting for DHCP on $PRIVATE_INTERFACE... attempt $i/12"
+    log_status "[Step 9] Waiting for DHCP on $PRIVATE_INTERFACE... $i/12"
     sleep 5
 done
 if ! ip addr show "$PRIVATE_INTERFACE" | grep -q "inet "; then
-    log_status "[Step 9] ERROR: $PRIVATE_INTERFACE has no IP after 60s - DHCP failed or interface not ready"
+    log_status "[Step 9] ERROR: $PRIVATE_INTERFACE has no IP after 60s"
     exit 1
 fi
 # Step 10 — AWS Metadata Retrieval and VPC Routing
@@ -218,15 +165,14 @@ REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region --head
 VPC_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
   http://169.254.169.254/latest/meta-data/network/interfaces/macs/$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
   http://169.254.169.254/latest/meta-data/mac)/vpc-id)
-echo "[Step 10] Recovering CIDR for VPC: $VPC_ID"
-log_status "[Step 10] Recovering CIDR for VPC: $VPC_ID"
+log_status "[Step 10] VPC_ID=$VPC_ID REGION=$REGION"
 VPC_CIDR=$(aws ec2 describe-vpcs --region $REGION --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock' --output text)
 PRIVATE_GATEWAY=$(ip route show dev $PRIVATE_INTERFACE | grep -E "^default|^0.0.0.0" | awk '{print $3}' | head -1)
 if [ -n "$PRIVATE_GATEWAY" ]; then
     ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE 2>/dev/null || true
 fi
 # Step 11 — Persistent Route via systemd Service
-log_status "[Step 11] Creating static route"
+log_status "[Step 11] Creating static route service"
 cat <<EOF > /etc/systemd/system/custom-routes.service
 [Unit]
 Description=Add custom routes
@@ -239,17 +185,13 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
-log_status "[Step 11] Restarting systemd for the new service"
 systemctl daemon-reexec
 systemctl daemon-reload
-log_status "[Step 11] Enabling new service on startup"
 systemctl enable custom-routes.service
-log_status "[Step 11] Launching immediately the service"
-systemctl start custom-routes.service || log_status "[Step 11] WARNING: custom-routes service failed, but continuing"
+systemctl start custom-routes.service || log_status "[Step 11] WARNING: custom-routes service failed"
 # Step 12 — nftables NAT Configuration
-log_status "[Step 12] Creating nftables configuration directories"
+log_status "[Step 12] Configuring nftables NAT rules"
 mkdir -p /etc/nftables /etc/sysconfig
-log_status "[Step 12] Configuring nftables rules for NAT functionality"
 cat > /etc/nftables/nat-instance.nft <<'NFTEOF'
 #!/usr/sbin/nft -f
 flush ruleset
@@ -278,29 +220,22 @@ table inet nat_instance {
     }
 }
 NFTEOF
-# Replace placeholders with actual values
 sed -i "s/PUBLIC_IFACE_PLACEHOLDER/$PUBLIC_INTERFACE/g" /etc/nftables/nat-instance.nft
 sed -i "s/PRIVATE_IFACE_PLACEHOLDER/$PRIVATE_INTERFACE/g" /etc/nftables/nat-instance.nft
-log_status "[Step 12] Setting executable permissions on nftables configuration"
 chmod +x /etc/nftables/nat-instance.nft
-log_status "[Step 12] Loading nftables NAT configuration"
 if /usr/sbin/nft -f /etc/nftables/nat-instance.nft; then
-    log_status "[Step 12] SUCCESS: nftables rules loaded successfully"
+    log_status "[Step 12] SUCCESS: nftables rules loaded"
 else
-    log_status "[Step 12] ERROR: Failed to load nftables rules"
+    log_status "[Step 12] ERROR: failed to load nftables rules"
     exit 1
 fi
-log_status "[Step 12] Verifying nftables rules are active"
-if /usr/sbin/nft list ruleset | grep -q "nat_instance"; then
-    log_status "[Step 12] SUCCESS: NAT instance rules are active"
-else
-    log_status "[Step 12] ERROR: NAT instance rules not found in active ruleset"
+if ! /usr/sbin/nft list ruleset | grep -q "nat_instance"; then
+    log_status "[Step 12] ERROR: nat_instance rules not found in ruleset"
     exit 1
 fi
-log_status "[Step 12] Configuring nftables persistence"
 cp /etc/nftables/nat-instance.nft /etc/sysconfig/nftables.conf
 # Step 13 — nftables Persistence via systemd Service
-log_status "[Step 13] Creating nftables systemd service"
+log_status "[Step 13] Creating nftables-nat systemd service"
 cat > /etc/systemd/system/nftables-nat.service <<NFTEOF
 [Unit]
 Description=nftables NAT instance firewall
@@ -319,14 +254,13 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 NFTEOF
-log_status "[Step 13] Enabling and starting nftables-nat service"
 systemctl daemon-reload
 systemctl enable nftables-nat.service
 systemctl start nftables-nat.service
 if systemctl is-active --quiet nftables-nat.service; then
-    log_status "[Step 13] SUCCESS: nftables-nat service is running"
+    log_status "[Step 13] SUCCESS: nftables-nat running"
 else
-    log_status "[Step 13] ERROR: nftables-nat service failed to start"
+    log_status "[Step 13] ERROR: nftables-nat failed to start"
     systemctl status nftables-nat.service
     exit 1
 fi
@@ -346,49 +280,20 @@ tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/nul
     "namespace": "EC2/NATinstance",
     "metrics_collected": {
       "disk": {
-        "measurement": [
-          {
-            "name": "used_percent",
-            "rename": "disk_used_percent",
-            "unit": "Percent"
-          }
-        ],
+        "measurement": [{"name": "used_percent","rename": "disk_used_percent","unit": "Percent"}],
         "drop_device": true,
-        "append_dimensions": {
-          "InstanceId": "$INSTANCE_ID",
-          "InstanceType": "$INSTANCETYPE"
-        },
+        "append_dimensions": {"InstanceId": "$INSTANCE_ID","InstanceType": "$INSTANCETYPE"},
         "metrics_collection_interval": 60,
-        "resources": [
-          "/"
-        ]
+        "resources": ["/"]
       },
       "mem": {
-        "measurement": [
-          {
-            "name": "used_percent",
-            "rename": "memory_used_percent",
-            "unit": "Percent"
-          }
-        ],
-        "append_dimensions": {
-          "InstanceId": "$INSTANCE_ID",
-          "InstanceType": "$INSTANCETYPE"
-        },
+        "measurement": [{"name": "used_percent","rename": "memory_used_percent","unit": "Percent"}],
+        "append_dimensions": {"InstanceId": "$INSTANCE_ID","InstanceType": "$INSTANCETYPE"},
         "metrics_collection_interval": 60
       },
       "swap": {
-        "measurement": [
-          {
-            "name": "used_percent",
-            "rename": "swap_used_percent",
-            "unit": "Percent"
-          }
-        ],
-        "append_dimensions": {
-          "InstanceId": "$INSTANCE_ID",
-          "InstanceType": "$INSTANCETYPE"
-        },
+        "measurement": [{"name": "used_percent","rename": "swap_used_percent","unit": "Percent"}],
+        "append_dimensions": {"InstanceId": "$INSTANCE_ID","InstanceType": "$INSTANCETYPE"},
         "metrics_collection_interval": 60
       }
     }
@@ -397,4 +302,4 @@ tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/nul
 EOL
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 systemctl restart amazon-cloudwatch-agent
-log_status "Userdata script execution completed"
+log_status "Userdata script completed successfully"
