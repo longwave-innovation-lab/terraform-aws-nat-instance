@@ -128,6 +128,13 @@ resource "aws_eip_association" "nat_eip" {
   ]
 }
 
+# Trigger per ricreazione forzata delle istanze NAT al cambio di nat_instance_count.
+# Quando nat_instance_per_az cambia (SINGLE→MULTI-AZ o viceversa), questo resource
+# viene rimpiazzato, attivando il replace_triggered_by su aws_instance.nat_instance.
+resource "terraform_data" "nat_instance_trigger" {
+  input = local.nat_instance_count
+}
+
 # AMI Data Source - Finds latest Amazon Linux 2023 AMI
 # AWS CLI commands to find AMI manually:
 # For ARM64: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-arm64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>
@@ -198,6 +205,13 @@ resource "aws_instance" "nat_instance" {
 
   tags = {
     Name = "${var.name_prefix}-natgw-${count.index + 1}"
+  }
+
+  # Ricreazione forzata quando nat_instance_count cambia (SINGLE→MULTI-AZ o viceversa).
+  # Garantisce che tutte le istanze vengano ricreate con userdata aggiornato e
+  # routing corretto invece di lasciare istanze esistenti con stato inconsistente.
+  lifecycle {
+    replace_triggered_by = [terraform_data.nat_instance_trigger]
   }
 
 }
