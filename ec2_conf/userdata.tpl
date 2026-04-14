@@ -171,24 +171,21 @@ PRIVATE_GATEWAY=$(ip route show dev $PRIVATE_INTERFACE | grep -E "^default|^0.0.
 if [ -n "$PRIVATE_GATEWAY" ]; then
     ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE 2>/dev/null || true
 fi
-# Step 11 — Persistent Route via systemd Service
-log_status "[Step 11] Creating static route service"
-cat <<EOF > /etc/systemd/system/custom-routes.service
-[Unit]
-Description=Add custom routes
-After=network-online.target
-Wants=network-online.target
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'PRIVATE_GATEWAY=\$(ip route show dev $PRIVATE_INTERFACE | grep -E "^default|^0.0.0.0" | awk "{print \$3}" | head -1); if [ -n "\$PRIVATE_GATEWAY" ]; then ip route add $VPC_CIDR via \$PRIVATE_GATEWAY dev $PRIVATE_INTERFACE 2>/dev/null || true; fi'
-RemainAfterExit=yes
-[Install]
-WantedBy=multi-user.target
-EOF
-systemctl daemon-reexec
-systemctl daemon-reload
-systemctl enable custom-routes.service
-systemctl start custom-routes.service || log_status "[Step 11] WARNING: custom-routes service failed"
+# Step 11 — Persistent VPC CIDR Route via NetworkManager
+# NM applica le route del profilo DOPO che DHCP ha completato sull'interfaccia,
+# eliminando la race condition del systemd service con network-online.target.
+log_status "[Step 11] Adding VPC CIDR route to NetworkManager profile for $PRIVATE_INTERFACE"
+NM_CONN=$(nmcli -g GENERAL.CONNECTION device show "$PRIVATE_INTERFACE" 2>/dev/null)
+if [ -z "$NM_CONN" ]; then
+    log_status "[Step 11] ERROR: no NetworkManager connection found for $PRIVATE_INTERFACE"
+    exit 1
+fi
+if [ -z "$PRIVATE_GATEWAY" ]; then
+    log_status "[Step 11] ERROR: PRIVATE_GATEWAY is empty, cannot add route"
+    exit 1
+fi
+nmcli connection modify "$NM_CONN" +ipv4.routes "$VPC_CIDR $PRIVATE_GATEWAY"
+log_status "[Step 11] SUCCESS: route $VPC_CIDR via $PRIVATE_GATEWAY added to NM profile '$NM_CONN'"
 # Step 12 — nftables NAT Configuration
 log_status "[Step 12] Configuring nftables NAT rules"
 mkdir -p /etc/nftables /etc/sysconfig
