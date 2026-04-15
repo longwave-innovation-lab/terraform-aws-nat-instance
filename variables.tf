@@ -89,6 +89,12 @@ variable "enable_internet_check" {
   default     = false
 }
 
+variable "private_subnet_count" {
+  description = "Static number of private subnets. Required when enable_internet_check = true and private_subnet_ids are derived from module outputs (e.g. module.vpc.private_subnets). Without this, switching NAT mode in a single apply causes a 'for_each keys unknown at plan-time' error because Terraform marks module outputs as unknown when the source module is being modified. Must match length(private_subnet_ids)."
+  type        = number
+  default     = null
+}
+
 variable "internet_check_alert_emails" {
   description = "List of email addresses for internet connectivity check alerts. Required when enable_internet_check is true."
   type        = list(string)

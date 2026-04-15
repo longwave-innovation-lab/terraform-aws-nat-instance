@@ -6,7 +6,13 @@
 
 # Retrieve private subnets
 locals {
-  subnet_map = var.enable_internet_check ? { for idx, subnet_id in var.private_subnet_ids : tostring(idx) => subnet_id } : {}
+  # Usa private_subnet_count (intero statico) se fornito, altrimenti length().
+  # Quando private_subnet_ids proviene da output di moduli in modifica nello stesso apply
+  # (es. switch MANAGED→NAT_INSTANCE), Terraform marca l'intera lista come unknown,
+  # rendendo length() e le chiavi for_each unknown. Con un intero statico le chiavi
+  # diventano range(N) = ["0","1",...] sempre note a plan-time.
+  _subnet_count = var.private_subnet_count != null ? var.private_subnet_count : length(var.private_subnet_ids)
+  subnet_map    = var.enable_internet_check ? { for idx in range(local._subnet_count) : tostring(idx) => var.private_subnet_ids[idx] } : {}
 }
 
 # SNS Topic for alarms
@@ -195,7 +201,7 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 # come chiavi for_each possono risultare unknown al primo apply.
 # Il subnet ID rimane visibile nell'alarm_name come attributo (risolto all'apply).
 resource "aws_cloudwatch_metric_alarm" "internet_check" {
-  count = var.enable_internet_check ? length(var.private_subnet_ids) : 0
+  count = var.enable_internet_check ? local._subnet_count : 0
 
   alarm_name          = "${var.name_prefix}-internet-check-alarm-${var.private_subnet_ids[count.index]}"
   comparison_operator = "LessThanThreshold"

@@ -43,6 +43,10 @@ module "nat_gateway" {
   name_prefix             = local.name_prefix
   nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
+  # Valore statico richiesto quando enable_internet_check = true e si esegue un apply
+  # che modifica anche module.vpc nello stesso piano (es. switch MANAGED→NAT_INSTANCE).
+  # Deve corrispondere al numero di subnet private definite nel modulo vpc.
+  private_subnet_count = local.az_count
   # if ami_id is null set latest
   #ami_id                  = var.ami_id
 
