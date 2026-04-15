@@ -130,9 +130,14 @@ module "nat_gateway" {
   nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
 
-  # Internet Connectivity Check (Lambda-based monitoring) — disabled by default
+  # Internet Connectivity Check (Lambda-based monitoring) — disabled by default.
+  # Uncomment the block below to enable. private_subnet_count is required only when
+  # enable_internet_check = true: it must be a static integer (not derived from module
+  # outputs) so Terraform can plan Lambda resources even when module.vpc is being
+  # modified in the same apply (e.g. MANAGED → NAT_INSTANCE switch).
   # enable_internet_check               = true
-  # internet_check_alert_emails         = ["change_me@email.com"] # Required when enable_internet_check is true
+  # private_subnet_count                = 2             # Required. Must equal the number of private subnets.
+  # internet_check_alert_emails         = ["change_me@email.com"]
   # internet_check_schedule_expression  = "rate(5 minutes)"
   # internet_check_log_retention_days   = 7
   # internet_check_evaluation_periods   = 2
@@ -519,7 +524,8 @@ module "nat_instance" {
   source = "path/to/module"
   # ... other configurations ...
   enable_internet_check       = true
-  internet_check_alert_emails = ["alerts@example.com"] # Required when enable_internet_check is true
+  private_subnet_count        = 2                        # Required when enable_internet_check = true. Must be a static integer.
+  internet_check_alert_emails = ["alerts@example.com"]   # Required when enable_internet_check is true
 }
 ```
 
@@ -541,6 +547,7 @@ module "nat_instance" {
   # ... other configurations ...
 
   enable_internet_check                = true
+  private_subnet_count                 = 2  # Required. Static integer = number of private subnets.
   internet_check_alert_emails          = ["alerts@example.com", "team@example.com"]
   internet_check_schedule_expression   = "rate(5 minutes)"
   internet_check_schedule_minutes      = 5
@@ -557,6 +564,7 @@ module "nat_instance" {
 | Variable | Description | Type | Default | Required |
 |---|---|---|---|:---:|
 | `enable_internet_check` | Enable Lambda-based internet connectivity check | `bool` | `false` | no |
+| `private_subnet_count` | Number of private subnets (e.g. `2` for 2 AZs). **Required when `enable_internet_check = true`.** Must be a static integer literal — not derived from module outputs — so Terraform can plan Lambda resources even when `module.vpc` is modified in the same apply (e.g. MANAGED → NAT_INSTANCE switch). | `number` | `null` | yes (if enabled) |
 | `internet_check_alert_emails` | List of email addresses for alerts. Required when `enable_internet_check` is `true` | `list(string)` | `[]` | yes (if enabled) |
 | `internet_check_schedule_expression` | CloudWatch Event schedule expression | `string` | `"rate(5 minutes)"` | no |
 | `internet_check_schedule_minutes` | Schedule interval in minutes (for description only) | `number` | `5` | no |
@@ -638,20 +646,20 @@ When you configure `internet_check_alert_emails`, you'll receive SNS email notif
 **Subject:**
 
 ```text
-ALARM: "<name-prefix>-internet-check-alarm-<subnet-id>" in <Region>
+ALARM: "<name-prefix>-no-internet-<subnet-id>" in <Region>
 ```
 
 **Body Example:**
 
 ```text
 You are receiving this email because your Amazon CloudWatch Alarm
-"my-project-internet-check-alarm-subnet-abc123" in the EU (Ireland)
+"my-project-no-internet-subnet-abc123" in the EU (Ireland)
 region has entered the ALARM state, because "Threshold Crossed: 2
 datapoints [0.0 (04/03/26 13:10:00), 0.0 (04/03/26 13:15:00)] were
 less than the threshold (1.0)."
 
 Alarm Details:
-- Name:          my-project-internet-check-alarm-subnet-abc123
+- Name:          my-project-no-internet-subnet-abc123
 - Description:   Internet connectivity check failed in subnet subnet-abc123
 - State Change:  OK -> ALARM
 - Timestamp:     Tuesday 04 March, 2026 13:16:45 UTC
@@ -669,20 +677,20 @@ Monitored Metric:
 **Subject:**
 
 ```text
-OK: "<name-prefix>-internet-check-alarm-<subnet-id>" in <Region>
+OK: "<name-prefix>-no-internet-<subnet-id>" in <Region>
 ```
 
 **Body Example:**
 
 ```text
 You are receiving this email because your Amazon CloudWatch Alarm
-"my-project-internet-check-alarm-subnet-abc123" in the EU (Ireland)
+"my-project-no-internet-subnet-abc123" in the EU (Ireland)
 region has returned to the OK state, because "Threshold Crossed: 2
 datapoints [1.0 (04/03/26 13:20:00), 1.0 (04/03/26 13:25:00)] were
 not less than the threshold (1.0)."
 
 Alarm Details:
-- Name:          my-project-internet-check-alarm-subnet-abc123
+- Name:          my-project-no-internet-subnet-abc123
 - Description:   Internet connectivity check failed in subnet subnet-abc123
 - State Change:  ALARM -> OK
 - Timestamp:     Tuesday 04 March, 2026 13:26:12 UTC

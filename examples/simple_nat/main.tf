@@ -43,19 +43,20 @@ module "nat_gateway" {
   name_prefix             = local.name_prefix
   nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
-  # Static value required when enable_internet_check = true and an apply also modifies
-  # module.vpc in the same plan (e.g. MANAGED→NAT_INSTANCE switch).
-  # Must match the number of private subnets defined in the vpc module.
-  private_subnet_count = local.az_count
   # if ami_id is null set latest
-  #ami_id                  = var.ami_id
+  #ami_id = var.ami_id
 
-  # Internet Connectivity Check (Lambda-based monitoring)
-  # enable_internet_check       = true
-  # internet_check_alert_emails = ["change_me@email.com"] # Required when enable_internet_check is true
-  # internet_check_schedule_expression = "rate(5 minutes)"
-  # internet_check_log_retention_days  = 7
-  # internet_check_evaluation_periods  = 2
-  # internet_check_period              = 300
-  # internet_check_threshold           = 1
+  # Internet Connectivity Check (Lambda-based monitoring) — disabled by default.
+  # Uncomment the block below to enable. private_subnet_count is required only when
+  # enable_internet_check = true: it must be a static integer (not derived from module
+  # outputs) so Terraform can plan Lambda resources even when module.vpc is being
+  # modified in the same apply (e.g. MANAGED → NAT_INSTANCE switch).
+  # enable_internet_check               = true
+  # private_subnet_count                = local.az_count  # must equal the number of private subnets
+  # internet_check_alert_emails         = ["change_me@email.com"]
+  # internet_check_schedule_expression  = "rate(5 minutes)"
+  # internet_check_log_retention_days   = 7
+  # internet_check_evaluation_periods   = 2
+  # internet_check_period               = 300
+  # internet_check_threshold            = 1
 }
