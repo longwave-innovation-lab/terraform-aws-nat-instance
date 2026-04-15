@@ -36,8 +36,8 @@ resource "aws_sns_topic_subscription" "lambda_alerts_email" {
 
 # IAM Role for Lambda
 resource "aws_iam_role" "lambda_role" {
-  count       = var.enable_internet_check ? 1 : 0
-  name_prefix = "${var.name_prefix}-lambda-internet-check-role-"
+  count = var.enable_internet_check ? 1 : 0
+  name  = "${var.name_prefix}-lambda-inet-chk-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -190,10 +190,14 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 }
 
 # CloudWatch Metric Alarm for each subnet
+# Usa count invece di for_each: length(var.private_subnet_ids) è nota a plan-time
+# (numero di subnet predeterminato dalla configurazione AZ), mentre i singoli subnet ID
+# come chiavi for_each possono risultare unknown al primo apply.
+# Il subnet ID rimane visibile nell'alarm_name come attributo (risolto all'apply).
 resource "aws_cloudwatch_metric_alarm" "internet_check" {
-  for_each = local.subnet_map
+  count = var.enable_internet_check ? length(var.private_subnet_ids) : 0
 
-  alarm_name          = "${var.name_prefix}-internet-check-alarm-${each.value}"
+  alarm_name          = "${var.name_prefix}-internet-check-alarm-${var.private_subnet_ids[count.index]}"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = var.internet_check_evaluation_periods
   metric_name         = "InternetConnectivityStatus"
@@ -201,17 +205,17 @@ resource "aws_cloudwatch_metric_alarm" "internet_check" {
   period              = var.internet_check_period
   statistic           = "SampleCount"
   threshold           = var.internet_check_threshold
-  alarm_description   = "Internet connectivity check failed in subnet ${each.value}"
-  alarm_actions       = var.enable_internet_check ? [aws_sns_topic.lambda_alerts[0].arn] : []
-  ok_actions          = var.enable_internet_check ? [aws_sns_topic.lambda_alerts[0].arn] : []
+  alarm_description   = "Internet connectivity check failed in subnet ${var.private_subnet_ids[count.index]}"
+  alarm_actions       = [aws_sns_topic.lambda_alerts[0].arn]
+  ok_actions          = [aws_sns_topic.lambda_alerts[0].arn]
   treat_missing_data  = "breaching"
 
   dimensions = {
     VpcId    = var.vpc_id
-    SubnetId = each.value
+    SubnetId = var.private_subnet_ids[count.index]
   }
 
   tags = {
-    Name = "${var.name_prefix}-internet-check-alarm-${each.value}"
+    Name = "${var.name_prefix}-internet-check-alarm-${var.private_subnet_ids[count.index]}"
   }
 }
