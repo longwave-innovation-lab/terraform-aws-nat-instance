@@ -5,17 +5,18 @@
 # from private subnets through NAT instances.
 
 locals {
-  # _subnet_count: uses private_subnet_count (static integer) when provided.
-  # When private_subnet_ids comes from module outputs being modified in the same apply
-  # (e.g. MANAGED→NAT_INSTANCE switch), Terraform marks the entire list as unknown,
-  # making length() unknown too. A static integer breaks this dependency chain.
-  _subnet_count = var.private_subnet_count != null ? var.private_subnet_count : length(var.private_subnet_ids)
+  # _subnet_count: static integer from private_subnet_count.
+  # When enable_internet_check = false, defaults to 0 (no resources created, no unknown needed).
+  # When enable_internet_check = true, private_subnet_count MUST be passed explicitly
+  # (enforced by precondition on aws_sns_topic.lambda_alerts) because private_subnet_ids
+  # may be unknown at plan-time when module.vpc is being modified in the same apply.
+  _subnet_count = var.enable_internet_check ? coalesce(var.private_subnet_count, 0) : 0
 
-  # subnet_indices: fully static map { "0" = 0, "1" = 1, ... }.
-  # Keys and values are pure integers, always known at plan-time even when
-  # private_subnet_ids is entirely unknown. Actual subnet IDs are referenced
-  # only inside resource attributes (where unknown values are acceptable).
-  subnet_indices = var.enable_internet_check ? { for i in range(local._subnet_count) : tostring(i) => i } : {}
+  # subnet_indices: fully static map { "0" = 0, "1" = 1, ... } derived from _subnet_count.
+  # No ternary conditional: range(0) = {} when disabled, range(N) = {0..N-1} when enabled.
+  # Keys and values are pure integers, always known at plan-time.
+  # Actual subnet IDs are referenced only inside resource attributes (where unknown is fine).
+  subnet_indices = { for i in range(local._subnet_count) : tostring(i) => i }
 }
 
 # SNS Topic for alarms
@@ -31,6 +32,10 @@ resource "aws_sns_topic" "lambda_alerts" {
     precondition {
       condition     = length(var.internet_check_alert_emails) > 0
       error_message = "You must set 'internet_check_alert_emails' with at least one address when 'enable_internet_check' is true."
+    }
+    precondition {
+      condition     = var.private_subnet_count != null
+      error_message = "You must set 'private_subnet_count' to the number of private subnets (e.g. 1, 2, or 3) when 'enable_internet_check' is true. This must be a static integer — not derived from module outputs — to allow Terraform to plan Lambda resources even when the VPC module is being modified in the same apply."
     }
   }
 }
@@ -208,7 +213,7 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 # count uses _subnet_count (static integer from private_subnet_count).
 # alarm_name uses count.index (known at plan-time); SubnetId appears in dimensions as an attribute.
 resource "aws_cloudwatch_metric_alarm" "internet_check" {
-  count = var.enable_internet_check ? local._subnet_count : 0
+  count = local._subnet_count
 
   alarm_name          = "${var.name_prefix}-internet-check-alarm-${count.index}"
   comparison_operator = "LessThanThreshold"
