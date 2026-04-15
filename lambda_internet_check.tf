@@ -210,12 +210,13 @@ resource "aws_lambda_permission" "allow_eventbridge" {
 }
 
 # CloudWatch Metric Alarm for each subnet.
-# count uses _subnet_count (static integer from private_subnet_count).
-# alarm_name uses count.index (known at plan-time); SubnetId appears in dimensions as an attribute.
+# count uses _subnet_count (static integer from private_subnet_count) — always known at plan-time.
+# alarm_name and tags use var.private_subnet_ids[count.index] which is an attribute value
+# (not a for_each/count key), so it may be unknown at plan-time without causing errors.
 resource "aws_cloudwatch_metric_alarm" "internet_check" {
   count = local._subnet_count
 
-  alarm_name          = "${var.name_prefix}-internet-check-alarm-${count.index}"
+  alarm_name          = "${var.name_prefix}-no-internet-${var.private_subnet_ids[count.index]}"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = var.internet_check_evaluation_periods
   metric_name         = "InternetConnectivityStatus"
@@ -234,6 +235,6 @@ resource "aws_cloudwatch_metric_alarm" "internet_check" {
   }
 
   tags = {
-    Name = "${var.name_prefix}-internet-check-alarm-${count.index}"
+    Name = "${var.name_prefix}-no-internet-${var.private_subnet_ids[count.index]}"
   }
 }
