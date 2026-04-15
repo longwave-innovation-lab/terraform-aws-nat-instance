@@ -483,6 +483,8 @@ Writes the CloudWatch Agent configuration to `/opt/aws/amazon-cloudwatch-agent/e
 
 ## Internet Connectivity Check (Lambda-based Monitoring)
 
+> **Note:** This feature is available **only when `vpc_natgw_service_type = "NAT_INSTANCE"`**. When using `MANAGED` mode (AWS-managed NAT Gateway), the `module.nat_gateway` is not instantiated (`count = 0`) and no Lambda resources are created, regardless of the `enable_internet_check` value.
+
 This module includes an optional Lambda-based monitoring feature that verifies internet connectivity from private subnets through NAT instances. Defined in `lambda_internet_check.tf`.
 
 ### How It Works
