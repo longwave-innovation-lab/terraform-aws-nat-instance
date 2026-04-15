@@ -1,7 +1,7 @@
 locals {
   name_prefix = random_string.random_id.result
-  # Numero statico di AZ/subnet private: usato da module.nat_gateway come
-  # private_subnet_count per evitare errori for_each/count al cambio di NAT mode.
+  # Static AZ/private subnet count: passed to module.nat_gateway as private_subnet_count
+  # to avoid for_each/count unknown-at-plan-time errors when switching NAT mode.
   az_count = length(["${var.aws_region}a", "${var.aws_region}b"])
 }
 

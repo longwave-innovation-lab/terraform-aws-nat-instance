@@ -159,8 +159,8 @@ if ! ip addr show "$PRIVATE_INTERFACE" | grep -q "inet "; then
     exit 1
 fi
 # Step 10 — VPC CIDR retrieval via IMDSv2 and immediate route setup
-# Usa IMDSv2 invece di aws ec2 describe-vpcs: nessun permesso IAM richiesto,
-# nessuna dipendenza da routing funzionante, sempre disponibile al boot.
+# Uses IMDSv2 instead of aws ec2 describe-vpcs: no IAM permissions required,
+# no dependency on working routing, always available at boot.
 log_status "[Step 10] Getting VPC CIDR from IMDSv2..."
 TOKEN=$(curl -s --request PUT "http://169.254.169.254/latest/api/token" --header "X-aws-ec2-metadata-token-ttl-seconds: 3600")
 MAC_PUBLIC=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
@@ -179,11 +179,11 @@ if [ -z "$PRIVATE_GATEWAY" ]; then
 fi
 ip route add "$VPC_CIDR" via "$PRIVATE_GATEWAY" dev "$PRIVATE_INTERFACE" 2>/dev/null || true
 log_status "[Step 10] SUCCESS: route $VPC_CIDR via $PRIVATE_GATEWAY on $PRIVATE_INTERFACE"
-# Step 11 — Persistent VPC CIDR Route via systemd service con retry loop.
-# VPC_CIDR e PRIVATE_INTERFACE sono baked-in al write time.
-# PRIVATE_GATEWAY viene rilevato a runtime con retry (max 120s, 24 tentativi x 5s):
-# risolve la race condition con DHCP senza dipendere da network-online.target.
-# NetworkManager-dispatcher non è disponibile su AL2023 minimal.
+# Step 11 — Persistent VPC CIDR Route via systemd service with retry loop.
+# VPC_CIDR and PRIVATE_INTERFACE are baked-in at write time.
+# PRIVATE_GATEWAY is detected at runtime with retry (max 120s, 24 attempts x 5s):
+# resolves the DHCP race condition without depending on network-online.target.
+# NetworkManager-dispatcher is not available on AL2023 minimal.
 log_status "[Step 11] Creating vpc-route systemd service"
 cat > /etc/systemd/system/vpc-route.service <<EOF
 [Unit]

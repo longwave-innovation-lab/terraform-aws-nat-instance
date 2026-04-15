@@ -100,11 +100,11 @@ resource "aws_route" "private_subs" {
 }
 
 
-# Elastic IP - solo allocazione, senza associazione inline.
-# L'associazione inline causerebbe problemi di lifecycle durante il cambio SINGLE → MULTI-AZ:
-# Terraform proverebbe ad associare l'EIP a istanze già terminate.
-# La risorsa aws_eip_association separata garantisce l'ordine corretto:
-# disassocia EIP → distrugge istanza → crea nuova istanza → riassocia EIP.
+# Elastic IP - allocation only, no inline association.
+# Inline association causes lifecycle issues when switching SINGLE → MULTI-AZ:
+# Terraform would attempt to associate the EIP with already-terminated instances.
+# A separate aws_eip_association resource guarantees the correct order:
+# de-associate EIP → destroy instance → create new instance → re-associate EIP.
 resource "aws_eip" "nat_eip" {
   count  = local.nat_instance_count
   domain = "vpc"
@@ -114,9 +114,9 @@ resource "aws_eip" "nat_eip" {
   }
 }
 
-# Associazione EIP separata per gestire correttamente il lifecycle.
-# Si usa network_interface_id (ENI primaria/pubblica, eth0) invece di instance_id:
-# con due ENI attaccate, AWS richiede di specificare l'interfaccia esplicitamente.
+# Separate EIP association to correctly manage lifecycle.
+# Uses network_interface_id (primary/public ENI, eth0) instead of instance_id:
+# with two ENIs attached, AWS requires specifying the interface explicitly.
 resource "aws_eip_association" "nat_eip" {
   count                = local.nat_instance_count
   allocation_id        = aws_eip.nat_eip[count.index].id
@@ -128,9 +128,9 @@ resource "aws_eip_association" "nat_eip" {
   ]
 }
 
-# Trigger per ricreazione forzata delle istanze NAT al cambio di nat_instance_count.
-# Quando nat_instance_per_az cambia (SINGLE→MULTI-AZ o viceversa), questo resource
-# viene rimpiazzato, attivando il replace_triggered_by su aws_instance.nat_instance.
+# Trigger for forced recreation of NAT instances when nat_instance_count changes.
+# When nat_instance_per_az changes (SINGLE→MULTI-AZ or vice versa), this resource
+# is replaced, activating replace_triggered_by on aws_instance.nat_instance.
 resource "terraform_data" "nat_instance_trigger" {
   input = local.nat_instance_count
 }
@@ -207,9 +207,9 @@ resource "aws_instance" "nat_instance" {
     Name = "${var.name_prefix}-natgw-${count.index + 1}"
   }
 
-  # Ricreazione forzata quando nat_instance_count cambia (SINGLE→MULTI-AZ o viceversa).
-  # Garantisce che tutte le istanze vengano ricreate con userdata aggiornato e
-  # routing corretto invece di lasciare istanze esistenti con stato inconsistente.
+  # Forced recreation when nat_instance_count changes (SINGLE→MULTI-AZ or vice versa).
+  # Ensures all instances are recreated with updated userdata and correct routing
+  # instead of leaving existing instances in an inconsistent state.
   lifecycle {
     replace_triggered_by = [terraform_data.nat_instance_trigger]
   }
