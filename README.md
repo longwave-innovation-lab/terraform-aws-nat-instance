@@ -838,6 +838,7 @@ Alarm Details:
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.35.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 | <a name="provider_tls"></a> [tls](#provider\_tls) | 4.2.1 |
 
 ## Modules
@@ -874,7 +875,7 @@ No modules.
 | [aws_sns_topic.lambda_alerts](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) | resource |
 | [aws_sns_topic_subscription.lambda_alerts_email](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_subscription) | resource |
 | [aws_ssm_parameter.nat_instance_ssh_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
-| [terraform_data.nat_instance_trigger](https://developer.hashicorp.com/terraform/language/resources/terraform-data) | resource |
+| [terraform_data.nat_instance_trigger](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [tls_private_key.pk_nat](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
 | [archive_file.lambda_zip](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_ami.latest_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
@@ -903,7 +904,7 @@ No modules.
 | <a name="input_internet_check_threshold"></a> [internet\_check\_threshold](#input\_internet\_check\_threshold) | Threshold for the internet check alarm (number of successful checks) | `number` | `1` | no |
 | <a name="input_internet_check_urls"></a> [internet\_check\_urls](#input\_internet\_check\_urls) | List of HTTPS URLs to check for internet connectivity | `list(string)` | <pre>[<br/>  "https://1.1.1.1",<br/>  "https://dns.google/resolve?name=google.com"<br/>]</pre> | no |
 | <a name="input_nat_instance_per_az"></a> [nat\_instance\_per\_az](#input\_nat\_instance\_per\_az) | Whether to create a NAT instance per AZ or a single NAT instance for all AZs | `bool` | `false` | no |
-| <a name="input_private_subnet_count"></a> [private\_subnet\_count](#input\_private\_subnet\_count) | Number of private subnets. Required when `enable_internet_check = true`. Must be a static integer — not derived from module outputs — so Terraform can plan Lambda resources even when module.vpc is modified in the same apply. | `number` | `null` | yes (if `enable_internet_check = true`) |
+| <a name="input_private_subnet_count"></a> [private\_subnet\_count](#input\_private\_subnet\_count) | Number of private subnets (1, 2, or 3). Required when enable\_internet\_check = true. Must be a static literal integer — not derived from resource attributes or module outputs — so Terraform can plan Lambda resources even when module.vpc is being modified in the same apply. Typical value: length(var.availability\_zones) or the number of AZs passed to the VPC module. | `number` | `null` | no |
 | <a name="input_user_data_script"></a> [user\_data\_script](#input\_user\_data\_script) | Path to the custom user data script. By default use /ec2\_conf/userdata.tpl | `string` | `""` | no |
 
 ## Outputs
