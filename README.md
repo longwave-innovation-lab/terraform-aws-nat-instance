@@ -112,7 +112,7 @@ Creates an IAM role (`iam.tf`) with:
 
 - **CloudWatchAgentServerPolicy** — for CloudWatch Agent metrics
 - **AmazonSSMManagedInstanceCore** — for Systems Manager (SSM) access
-- Custom inline policy for `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeRouteTables`, `ec2:DescribeInternetGateways` — used by the user data script to retrieve VPC CIDR
+- Custom inline policy for `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeRouteTables`, `ec2:DescribeInternetGateways` — available for tooling or future automation (the user data script retrieves VPC CIDR via IMDSv2 and does not require these permissions)
 
 ## Usage Example
 
@@ -589,7 +589,7 @@ When `enable_internet_check = true`:
 
 | Resource | Count | Description |
 |---|---|---|
-| Lambda Functions | 1 per private subnet | Deployed inside VPC, Python 3.13 |
+| Lambda Functions | 1 per private subnet | Deployed inside VPC, Python 3.14 |
 | IAM Role & Policy | 1 | Lambda execution, CloudWatch, VPC ENI management |
 | Security Group | 1 | Allows all outbound traffic |
 | CloudWatch Log Groups | 1 per Lambda | Configurable retention |
@@ -805,10 +805,11 @@ Alarm Details:
    systemctl status nftables-nat.service
    ```
 
-10. **Check custom-routes service status**
+10. **Check vpc-route service status** (persistent VPC CIDR route via systemd)
 
     ```sh
-    systemctl status custom-routes.service
+    systemctl status vpc-route.service
+    journalctl -u vpc-route.service
     ```
 
 11. **To see which connections are currently established through the NAT instance**
@@ -852,6 +853,7 @@ No modules.
 | [aws_cloudwatch_log_group.internet_check_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_metric_alarm.internet_check](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm) | resource |
 | [aws_eip.nat_eip](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
+| [aws_eip_association.nat_eip](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip_association) | resource |
 | [aws_iam_instance_profile.ec2_nat_ssm_cloudwatch_instance_profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile) | resource |
 | [aws_iam_role.ec2_nat_ssm_cloudwatch](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.lambda_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -872,6 +874,7 @@ No modules.
 | [aws_sns_topic.lambda_alerts](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) | resource |
 | [aws_sns_topic_subscription.lambda_alerts_email](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_subscription) | resource |
 | [aws_ssm_parameter.nat_instance_ssh_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [terraform_data.nat_instance_trigger](https://developer.hashicorp.com/terraform/language/resources/terraform-data) | resource |
 | [tls_private_key.pk_nat](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
 | [archive_file.lambda_zip](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_ami.latest_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
@@ -900,6 +903,7 @@ No modules.
 | <a name="input_internet_check_threshold"></a> [internet\_check\_threshold](#input\_internet\_check\_threshold) | Threshold for the internet check alarm (number of successful checks) | `number` | `1` | no |
 | <a name="input_internet_check_urls"></a> [internet\_check\_urls](#input\_internet\_check\_urls) | List of HTTPS URLs to check for internet connectivity | `list(string)` | <pre>[<br/>  "https://1.1.1.1",<br/>  "https://dns.google/resolve?name=google.com"<br/>]</pre> | no |
 | <a name="input_nat_instance_per_az"></a> [nat\_instance\_per\_az](#input\_nat\_instance\_per\_az) | Whether to create a NAT instance per AZ or a single NAT instance for all AZs | `bool` | `false` | no |
+| <a name="input_private_subnet_count"></a> [private\_subnet\_count](#input\_private\_subnet\_count) | Number of private subnets. Required when `enable_internet_check = true`. Must be a static integer — not derived from module outputs — so Terraform can plan Lambda resources even when module.vpc is modified in the same apply. | `number` | `null` | yes (if `enable_internet_check = true`) |
 | <a name="input_user_data_script"></a> [user\_data\_script](#input\_user\_data\_script) | Path to the custom user data script. By default use /ec2\_conf/userdata.tpl | `string` | `""` | no |
 
 ## Outputs
