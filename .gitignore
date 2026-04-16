@@ -39,3 +39,9 @@ terraform.rc
 
 #code workspace
 *.code-workspace
+
+# File di test locali non destinati al repository
+examples/simple_nat/test_ec2.tf
+
+# Registro modifiche Claude Code (locale, non in repository)
+CLAUDE_CHANGES.md

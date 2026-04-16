@@ -112,7 +112,7 @@ Creates an IAM role (`iam.tf`) with:
 
 - **CloudWatchAgentServerPolicy** — for CloudWatch Agent metrics
 - **AmazonSSMManagedInstanceCore** — for Systems Manager (SSM) access
-- Custom inline policy for `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeRouteTables`, `ec2:DescribeInternetGateways` — used by the user data script to retrieve VPC CIDR
+- Custom inline policy for `ec2:DescribeVpcs`, `ec2:DescribeSubnets`, `ec2:DescribeRouteTables`, `ec2:DescribeInternetGateways` — available for tooling or future automation (the user data script retrieves VPC CIDR via IMDSv2 and does not require these permissions)
 
 ## Usage Example
 
@@ -130,9 +130,14 @@ module "nat_gateway" {
   nat_instance_per_az     = var.vpc_natgw_distribution == "MULTI-AZ" ? true : false
   instance_type           = var.instance_type
 
-  # Internet Connectivity Check (Lambda-based monitoring) — disabled by default
+  # Internet Connectivity Check (Lambda-based monitoring) — disabled by default.
+  # Uncomment the block below to enable. private_subnet_count is required only when
+  # enable_internet_check = true: it must be a static integer (not derived from module
+  # outputs) so Terraform can plan Lambda resources even when module.vpc is being
+  # modified in the same apply (e.g. MANAGED → NAT_INSTANCE switch).
   # enable_internet_check               = true
-  # internet_check_alert_emails         = ["change_me@email.com"] # Required when enable_internet_check is true
+  # private_subnet_count                = 2             # Required. Must equal the number of private subnets.
+  # internet_check_alert_emails         = ["change_me@email.com"]
   # internet_check_schedule_expression  = "rate(5 minutes)"
   # internet_check_log_retention_days   = 7
   # internet_check_evaluation_periods   = 2
@@ -295,55 +300,64 @@ The script automatically identifies the two network interfaces by their role:
 
 3. **PRIVATE_INTERFACE**: the remaining interface (excluding `lo`, `docker`, and the public interface)
 4. **Validation**: exits with error if either interface cannot be detected or doesn't exist
+5. **DHCP wait**: after detecting `PRIVATE_INTERFACE`, waits up to 60 seconds for DHCP to assign an IP address — the interface may appear in the kernel immediately after hot-attach but the DHCP lease may not be complete yet
 
-**Why:** Interface names can vary (`ens5`/`ens6`, `eth0`/`eth1`) depending on the instance type. This detection method is robust and doesn't rely on naming conventions.
+**Why:** Interface names can vary (`ens5`/`ens6`, `eth0`/`eth1`) depending on the instance type. This detection method is robust and doesn't rely on naming conventions. The DHCP wait prevents Step 10 from running with an empty `PRIVATE_GATEWAY`.
 
 ---
 
-#### Step 10 — AWS Metadata Retrieval and VPC Routing
+#### Step 10 — VPC CIDR Retrieval and Routing
 
 ```bash
 TOKEN=$(curl --request PUT "http://169.254.169.254/latest/api/token" ...)
-REGION=$(curl ... /latest/meta-data/placement/region)
-VPC_ID=$(curl ... /latest/meta-data/network/interfaces/macs/.../vpc-id)
-VPC_CIDR=$(aws ec2 describe-vpcs --vpc-ids $VPC_ID --query 'Vpcs[0].CidrBlock')
+MAC_PUBLIC=$(curl ... /latest/meta-data/network/interfaces/macs/)
+VPC_CIDR=$(curl ... /latest/meta-data/network/interfaces/macs/${MAC_PUBLIC}/vpc-ipv4-cidr-blocks)
 ```
 
 1. Obtains an **IMDSv2 token** (required because `http_tokens = "required"`)
-2. Retrieves the **region** and **VPC ID** from instance metadata
-3. Uses the **AWS CLI** to get the VPC CIDR block
-4. Adds a **static route** for VPC traffic via the private interface gateway:
+2. Retrieves the **full VPC CIDR block** directly from the IMDSv2 endpoint `vpc-ipv4-cidr-blocks` (no AWS CLI call, no IAM permission needed)
+3. Detects `PRIVATE_GATEWAY` from the DHCP-assigned default route on `PRIVATE_INTERFACE`
+4. Exits with error if either `VPC_CIDR` or `PRIVATE_GATEWAY` is empty
+5. Adds an **immediate static route** for the entire VPC CIDR via the private interface:
 
    ```bash
    ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE
    ```
 
-**Why:** Without this route, return traffic for VPC-internal destinations would go out the public interface instead of the private one.
+**Why:** Without this route, the Linux kernel's reverse-path filter (`rp_filter`) drops forwarded packets from subnets not directly connected to `PRIVATE_INTERFACE` (e.g. a second private subnet `10.0.2.0/24` in SINGLE mode). Using IMDSv2 instead of `aws ec2 describe-vpcs` eliminates the dependency on the EC2 API and removes the race condition where the API call could fail before routing was established.
 
 ---
 
-#### Step 11 — Persistent Route via systemd Service
+#### Step 11 — Persistent VPC CIDR Route via systemd Service
 
-Creates `/etc/systemd/system/custom-routes.service`:
+Creates `/etc/systemd/system/vpc-route.service`:
 
 ```ini
 [Unit]
-Description=Add custom routes
-After=network-online.target
+Description=Add VPC CIDR route on private interface <PRIVATE_INTERFACE>
+After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c '... ip route add $VPC_CIDR via $PRIVATE_GATEWAY dev $PRIVATE_INTERFACE ...'
 RemainAfterExit=yes
+ExecStart=/bin/bash -c 'for i in $(seq 1 24); do \
+  GW=$(ip route show dev <PRIVATE_INTERFACE> | grep -E "^default|^0\.0\.0\.0" | awk "{print \$3}" | head -1); \
+  if [ -n "$GW" ]; then \
+    ip route add <VPC_CIDR> via $GW dev <PRIVATE_INTERFACE> 2>/dev/null || true; \
+    exit 0; \
+  fi; \
+  sleep 5; \
+done; exit 1'
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-- A `oneshot` systemd service that re-adds the VPC route after every reboot
-- Enabled and started immediately
+- `VPC_CIDR` and `PRIVATE_INTERFACE` are **baked in at write time** during user data execution
+- `PRIVATE_GATEWAY` is **detected at runtime** with a retry loop (24 attempts × 5s = 120s max), eliminating the DHCP race condition
+- Status and logs visible via: `systemctl status vpc-route` and `journalctl -u vpc-route`
 
-**Why:** Routes added with `ip route add` are lost on reboot. This service ensures persistence.
+**Why:** Routes added with `ip route add` are lost on reboot. `NetworkManager-dispatcher.service` is not available on AL2023 minimal. Using `After=network-online.target` without a retry loop causes a race condition: the target is reached before DHCP assigns the default route on hot-attached secondary ENIs, leaving `PRIVATE_GATEWAY` empty and silently skipping the route. The internal retry loop solves this without external dependencies.
 
 ---
 
@@ -461,7 +475,7 @@ Writes the CloudWatch Agent configuration to `/opt/aws/amazon-cloudwatch-agent/e
 
 | Service | Purpose |
 |---|---|
-| `custom-routes.service` | Maintain static VPC routes across reboots |
+| `vpc-route.service` | Re-add VPC CIDR route on private interface after reboot (retry loop for DHCP) |
 | `nftables-nat.service` | Load nftables rules at boot |
 | `amazon-ssm-agent.service` | SSM remote access |
 | `amazon-cloudwatch-agent.service` | CloudWatch metrics |
@@ -473,6 +487,8 @@ Writes the CloudWatch Agent configuration to `/opt/aws/amazon-cloudwatch-agent/e
 | `/var/log/user-data.log` | Script execution logs |
 
 ## Internet Connectivity Check (Lambda-based Monitoring)
+
+> **Note:** This feature is available **only when `vpc_natgw_service_type = "NAT_INSTANCE"`**. When using `MANAGED` mode (AWS-managed NAT Gateway), the `module.nat_gateway` is not instantiated (`count = 0`) and no Lambda resources are created, regardless of the `enable_internet_check` value.
 
 This module includes an optional Lambda-based monitoring feature that verifies internet connectivity from private subnets through NAT instances. Defined in `lambda_internet_check.tf`.
 
@@ -508,7 +524,8 @@ module "nat_instance" {
   source = "path/to/module"
   # ... other configurations ...
   enable_internet_check       = true
-  internet_check_alert_emails = ["alerts@example.com"] # Required when enable_internet_check is true
+  private_subnet_count        = 2                        # Required when enable_internet_check = true. Must be a static integer.
+  internet_check_alert_emails = ["alerts@example.com"]   # Required when enable_internet_check is true
 }
 ```
 
@@ -530,6 +547,7 @@ module "nat_instance" {
   # ... other configurations ...
 
   enable_internet_check                = true
+  private_subnet_count                 = 2  # Required. Static integer = number of private subnets.
   internet_check_alert_emails          = ["alerts@example.com", "team@example.com"]
   internet_check_schedule_expression   = "rate(5 minutes)"
   internet_check_schedule_minutes      = 5
@@ -546,6 +564,7 @@ module "nat_instance" {
 | Variable | Description | Type | Default | Required |
 |---|---|---|---|:---:|
 | `enable_internet_check` | Enable Lambda-based internet connectivity check | `bool` | `false` | no |
+| `private_subnet_count` | Number of private subnets (e.g. `2` for 2 AZs). **Required when `enable_internet_check = true`.** Must be a static integer literal — not derived from module outputs — so Terraform can plan Lambda resources even when `module.vpc` is modified in the same apply (e.g. MANAGED → NAT_INSTANCE switch). | `number` | `null` | yes (if enabled) |
 | `internet_check_alert_emails` | List of email addresses for alerts. Required when `enable_internet_check` is `true` | `list(string)` | `[]` | yes (if enabled) |
 | `internet_check_schedule_expression` | CloudWatch Event schedule expression | `string` | `"rate(5 minutes)"` | no |
 | `internet_check_schedule_minutes` | Schedule interval in minutes (for description only) | `number` | `5` | no |
@@ -570,7 +589,7 @@ When `enable_internet_check = true`:
 
 | Resource | Count | Description |
 |---|---|---|
-| Lambda Functions | 1 per private subnet | Deployed inside VPC, Python 3.13 |
+| Lambda Functions | 1 per private subnet | Deployed inside VPC, Python 3.14 |
 | IAM Role & Policy | 1 | Lambda execution, CloudWatch, VPC ENI management |
 | Security Group | 1 | Allows all outbound traffic |
 | CloudWatch Log Groups | 1 per Lambda | Configurable retention |
@@ -627,20 +646,20 @@ When you configure `internet_check_alert_emails`, you'll receive SNS email notif
 **Subject:**
 
 ```text
-ALARM: "<name-prefix>-internet-check-alarm-<subnet-id>" in <Region>
+ALARM: "<name-prefix>-no-internet-<subnet-id>" in <Region>
 ```
 
 **Body Example:**
 
 ```text
 You are receiving this email because your Amazon CloudWatch Alarm
-"my-project-internet-check-alarm-subnet-abc123" in the EU (Ireland)
+"my-project-no-internet-subnet-abc123" in the EU (Ireland)
 region has entered the ALARM state, because "Threshold Crossed: 2
 datapoints [0.0 (04/03/26 13:10:00), 0.0 (04/03/26 13:15:00)] were
 less than the threshold (1.0)."
 
 Alarm Details:
-- Name:          my-project-internet-check-alarm-subnet-abc123
+- Name:          my-project-no-internet-subnet-abc123
 - Description:   Internet connectivity check failed in subnet subnet-abc123
 - State Change:  OK -> ALARM
 - Timestamp:     Tuesday 04 March, 2026 13:16:45 UTC
@@ -658,20 +677,20 @@ Monitored Metric:
 **Subject:**
 
 ```text
-OK: "<name-prefix>-internet-check-alarm-<subnet-id>" in <Region>
+OK: "<name-prefix>-no-internet-<subnet-id>" in <Region>
 ```
 
 **Body Example:**
 
 ```text
 You are receiving this email because your Amazon CloudWatch Alarm
-"my-project-internet-check-alarm-subnet-abc123" in the EU (Ireland)
+"my-project-no-internet-subnet-abc123" in the EU (Ireland)
 region has returned to the OK state, because "Threshold Crossed: 2
 datapoints [1.0 (04/03/26 13:20:00), 1.0 (04/03/26 13:25:00)] were
 not less than the threshold (1.0)."
 
 Alarm Details:
-- Name:          my-project-internet-check-alarm-subnet-abc123
+- Name:          my-project-no-internet-subnet-abc123
 - Description:   Internet connectivity check failed in subnet subnet-abc123
 - State Change:  ALARM -> OK
 - Timestamp:     Tuesday 04 March, 2026 13:26:12 UTC
@@ -786,10 +805,11 @@ Alarm Details:
    systemctl status nftables-nat.service
    ```
 
-10. **Check custom-routes service status**
+10. **Check vpc-route service status** (persistent VPC CIDR route via systemd)
 
     ```sh
-    systemctl status custom-routes.service
+    systemctl status vpc-route.service
+    journalctl -u vpc-route.service
     ```
 
 11. **To see which connections are currently established through the NAT instance**
@@ -818,6 +838,7 @@ Alarm Details:
 |------|---------|
 | <a name="provider_archive"></a> [archive](#provider\_archive) | 2.7.1 |
 | <a name="provider_aws"></a> [aws](#provider\_aws) | 6.35.0 |
+| <a name="provider_terraform"></a> [terraform](#provider\_terraform) | n/a |
 | <a name="provider_tls"></a> [tls](#provider\_tls) | 4.2.1 |
 
 ## Modules
@@ -833,6 +854,7 @@ No modules.
 | [aws_cloudwatch_log_group.internet_check_log_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group) | resource |
 | [aws_cloudwatch_metric_alarm.internet_check](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_metric_alarm) | resource |
 | [aws_eip.nat_eip](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
+| [aws_eip_association.nat_eip](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip_association) | resource |
 | [aws_iam_instance_profile.ec2_nat_ssm_cloudwatch_instance_profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile) | resource |
 | [aws_iam_role.ec2_nat_ssm_cloudwatch](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.lambda_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -853,6 +875,7 @@ No modules.
 | [aws_sns_topic.lambda_alerts](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic) | resource |
 | [aws_sns_topic_subscription.lambda_alerts_email](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/sns_topic_subscription) | resource |
 | [aws_ssm_parameter.nat_instance_ssh_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter) | resource |
+| [terraform_data.nat_instance_trigger](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [tls_private_key.pk_nat](https://registry.terraform.io/providers/hashicorp/tls/latest/docs/resources/private_key) | resource |
 | [archive_file.lambda_zip](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) | data source |
 | [aws_ami.latest_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
@@ -881,6 +904,7 @@ No modules.
 | <a name="input_internet_check_threshold"></a> [internet\_check\_threshold](#input\_internet\_check\_threshold) | Threshold for the internet check alarm (number of successful checks) | `number` | `1` | no |
 | <a name="input_internet_check_urls"></a> [internet\_check\_urls](#input\_internet\_check\_urls) | List of HTTPS URLs to check for internet connectivity | `list(string)` | <pre>[<br/>  "https://1.1.1.1",<br/>  "https://dns.google/resolve?name=google.com"<br/>]</pre> | no |
 | <a name="input_nat_instance_per_az"></a> [nat\_instance\_per\_az](#input\_nat\_instance\_per\_az) | Whether to create a NAT instance per AZ or a single NAT instance for all AZs | `bool` | `false` | no |
+| <a name="input_private_subnet_count"></a> [private\_subnet\_count](#input\_private\_subnet\_count) | Number of private subnets (1, 2, or 3). Required when enable\_internet\_check = true. Must be a static literal integer — not derived from resource attributes or module outputs — so Terraform can plan Lambda resources even when module.vpc is being modified in the same apply. Typical value: length(var.availability\_zones) or the number of AZs passed to the VPC module. | `number` | `null` | no |
 | <a name="input_user_data_script"></a> [user\_data\_script](#input\_user\_data\_script) | Path to the custom user data script. By default use /ec2\_conf/userdata.tpl | `string` | `""` | no |
 
 ## Outputs

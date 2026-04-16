@@ -89,6 +89,17 @@ variable "enable_internet_check" {
   default     = false
 }
 
+variable "private_subnet_count" {
+  description = "Number of private subnets (1, 2, or 3). Required when enable_internet_check = true. Must be a static literal integer — not derived from resource attributes or module outputs — so Terraform can plan Lambda resources even when module.vpc is being modified in the same apply. Typical value: length(var.availability_zones) or the number of AZs passed to the VPC module."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.private_subnet_count == null || (var.private_subnet_count >= 1 && var.private_subnet_count <= 10)
+    error_message = "private_subnet_count must be a positive integer between 1 and 10."
+  }
+}
+
 variable "internet_check_alert_emails" {
   description = "List of email addresses for internet connectivity check alerts. Required when enable_internet_check is true."
   type        = list(string)

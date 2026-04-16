@@ -100,15 +100,39 @@ resource "aws_route" "private_subs" {
 }
 
 
-# Elastic IP for instance primary network interface
+# Elastic IP - allocation only, no inline association.
+# Inline association causes lifecycle issues when switching SINGLE → MULTI-AZ:
+# Terraform would attempt to associate the EIP with already-terminated instances.
+# A separate aws_eip_association resource guarantees the correct order:
+# de-associate EIP → destroy instance → create new instance → re-associate EIP.
 resource "aws_eip" "nat_eip" {
-  count             = local.nat_instance_count
-  network_interface = aws_instance.nat_instance[count.index].primary_network_interface_id
-  domain            = "vpc"
+  count  = local.nat_instance_count
+  domain = "vpc"
 
   tags = {
     Name = "${var.name_prefix}-natgw-${count.index + 1}-az-${element(["a", "b", "c"], count.index)}"
   }
+}
+
+# Separate EIP association to correctly manage lifecycle.
+# Uses network_interface_id (primary/public ENI, eth0) instead of instance_id:
+# with two ENIs attached, AWS requires specifying the interface explicitly.
+resource "aws_eip_association" "nat_eip" {
+  count                = local.nat_instance_count
+  allocation_id        = aws_eip.nat_eip[count.index].id
+  network_interface_id = aws_instance.nat_instance[count.index].primary_network_interface_id
+
+  depends_on = [
+    aws_instance.nat_instance,
+    aws_network_interface_attachment.nat_private,
+  ]
+}
+
+# Trigger for forced recreation of NAT instances when nat_instance_count changes.
+# When nat_instance_per_az changes (SINGLE→MULTI-AZ or vice versa), this resource
+# is replaced, activating replace_triggered_by on aws_instance.nat_instance.
+resource "terraform_data" "nat_instance_trigger" {
+  input = local.nat_instance_count
 }
 
 # AMI Data Source - Finds latest Amazon Linux 2023 AMI
@@ -117,10 +141,16 @@ resource "aws_eip" "nat_eip" {
 # For x86_64: aws ec2 describe-images --owners amazon --filters 'Name=name,Values=al2023-ami-*-kernel-*-x86_64' 'Name=virtualization-type,Values=hvm' --query 'Images[*].[ImageId,Name,CreationDate]' --output table --region <your-region>
 data "aws_ami" "latest_ami" {
   most_recent = true
+  owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = [local.is_arm ? "al2023-ami-2023.*-kernel-*-arm64" : "al2023-ami-2023.*-kernel-*-x86_64"]
+    values = ["al2023-ami-*-kernel-*-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = [local.is_arm ? "arm64" : "x86_64"]
   }
 
   filter {
@@ -132,10 +162,7 @@ data "aws_ami" "latest_ami" {
     name   = "state"
     values = ["available"]
   }
-
-  owners = ["amazon"]
 }
-
 # EC2 Instance - Native Terraform Resources
 resource "aws_instance" "nat_instance" {
   count                = local.nat_instance_count
@@ -178,6 +205,13 @@ resource "aws_instance" "nat_instance" {
 
   tags = {
     Name = "${var.name_prefix}-natgw-${count.index + 1}"
+  }
+
+  # Forced recreation when nat_instance_count changes (SINGLE→MULTI-AZ or vice versa).
+  # Ensures all instances are recreated with updated userdata and correct routing
+  # instead of leaving existing instances in an inconsistent state.
+  lifecycle {
+    replace_triggered_by = [terraform_data.nat_instance_trigger]
   }
 
 }
